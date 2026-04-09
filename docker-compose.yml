@@ -6,6 +6,7 @@ services:
       - "8000:8000"
     environment:
       PYTHONUNBUFFERED: "1"
+      DATABASE_URL: postgresql+psycopg://statusflow:statusflow@postgres:5432/statusflow
     depends_on:
       - postgres
 

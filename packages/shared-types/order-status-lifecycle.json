@@ -1,0 +1,20 @@
+{
+  "entity": "Order",
+  "version": "0.1.0",
+  "statuses": [
+    "new",
+    "in_review",
+    "approved",
+    "rejected",
+    "fulfilled",
+    "cancelled"
+  ],
+  "allowedTransitions": {
+    "new": ["in_review", "cancelled"],
+    "in_review": ["approved", "rejected", "cancelled"],
+    "approved": ["fulfilled", "cancelled"],
+    "rejected": ["in_review", "cancelled"],
+    "fulfilled": [],
+    "cancelled": []
+  }
+}

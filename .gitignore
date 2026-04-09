@@ -7,6 +7,9 @@ Thumbs.db
 
 .local/
 local.properties
+.venv/
+.venv-*/
+deps/
 
 node_modules/
 dist/
