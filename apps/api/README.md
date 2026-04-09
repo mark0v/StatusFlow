@@ -8,3 +8,9 @@ Planned responsibilities:
 - status transitions
 - comments
 - history and audit behavior
+
+## Local run
+
+```bash
+python -m uvicorn app.main:app --app-dir apps/api --reload
+```

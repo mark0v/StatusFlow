@@ -33,3 +33,8 @@ The main goal is to practice realistic system design and QA:
 ## Current stage
 
 The repository is currently an initial scaffold. The next step is to turn each app workspace into a runnable service and wire local development through Docker Compose.
+
+## Local development
+
+- `docker compose up --build api web postgres` runs the backend stack
+- `apps/mobile/` contains the Android/Jetpack Compose starter project and runs separately in Android Studio

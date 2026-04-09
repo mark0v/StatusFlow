@@ -5,6 +5,9 @@ Thumbs.db
 .env.*
 !.env.example
 
+.local/
+local.properties
+
 node_modules/
 dist/
 build/
@@ -16,13 +19,16 @@ coverage/
 .idea/
 .vscode/
 .agents/
+.gradle/
 
 *.log
 *.tmp
+*.tsbuildinfo
 
 .pytest_cache/
 __pycache__/
 *.pyc
+.vendor/
 
 android/.gradle/
 android/local.properties

@@ -1,34 +1,19 @@
 services:
   api:
-    image: node:22-alpine
-    working_dir: /workspace
-    command: ["sh", "-c", "echo 'API app scaffold goes here' && sleep infinity"]
-    volumes:
-      - ./apps/api:/workspace
+    build:
+      context: ./apps/api
     ports:
       - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
     depends_on:
       - postgres
 
   web:
-    image: node:22-alpine
-    working_dir: /workspace
-    command: ["sh", "-c", "echo 'Web app scaffold goes here' && sleep infinity"]
-    volumes:
-      - ./apps/web:/workspace
+    build:
+      context: ./apps/web
     ports:
       - "3000:3000"
-    depends_on:
-      - api
-
-  mobile:
-    image: node:22-alpine
-    working_dir: /workspace
-    command: ["sh", "-c", "echo 'Mobile app scaffold goes here' && sleep infinity"]
-    volumes:
-      - ./apps/mobile:/workspace
-    ports:
-      - "8081:8081"
     depends_on:
       - api
 

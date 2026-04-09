@@ -8,3 +8,10 @@ Planned responsibilities:
 - filters
 - status updates
 - comments and history
+
+## Local run
+
+```bash
+npm.cmd install
+npm.cmd run dev --workspace apps/web
+```

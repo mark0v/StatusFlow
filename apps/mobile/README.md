@@ -8,3 +8,18 @@ Planned responsibilities:
 - create order
 - local Room cache
 - sync and offline handling
+
+## Current scaffold
+
+The app now includes a minimal Jetpack Compose Android shell with a single
+screen that can become the base for auth, order list, and sync flows.
+
+## Local build
+
+```bash
+cd apps/mobile
+gradlew.bat assembleDebug
+```
+
+The current workspace uses a repository-local Android toolchain under `.local/`
+for JDK, Gradle, and Android SDK components.
