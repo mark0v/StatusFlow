@@ -1,0 +1,47 @@
+services:
+  api:
+    image: node:22-alpine
+    working_dir: /workspace
+    command: ["sh", "-c", "echo 'API app scaffold goes here' && sleep infinity"]
+    volumes:
+      - ./apps/api:/workspace
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+
+  web:
+    image: node:22-alpine
+    working_dir: /workspace
+    command: ["sh", "-c", "echo 'Web app scaffold goes here' && sleep infinity"]
+    volumes:
+      - ./apps/web:/workspace
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  mobile:
+    image: node:22-alpine
+    working_dir: /workspace
+    command: ["sh", "-c", "echo 'Mobile app scaffold goes here' && sleep infinity"]
+    volumes:
+      - ./apps/mobile:/workspace
+    ports:
+      - "8081:8081"
+    depends_on:
+      - api
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: statusflow
+      POSTGRES_USER: statusflow
+      POSTGRES_PASSWORD: statusflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:
