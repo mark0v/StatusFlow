@@ -19,6 +19,7 @@ build/
 .expo/
 .turbo/
 coverage/
+outputs/
 
 .idea/
 .vscode/
