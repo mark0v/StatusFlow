@@ -690,9 +690,9 @@ private fun CreateOrderCard(
 
 @Composable
 private fun QueueSectionHeader(title: String, subtitle: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
-        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Slate300)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Slate300)
     }
 }
 
@@ -940,7 +940,7 @@ private fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectOr
                 )
                 CompactMetaPill(
                     label = "Updated",
-                    value = order.updatedAtLabel,
+                    value = compactTimestampLabel(order.updatedAtLabel),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -1049,7 +1049,7 @@ private fun CompactMetaPill(label: String, value: String, modifier: Modifier = M
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = Slate300)
-            Text(value, style = MaterialTheme.typography.bodyMedium, color = Slate100, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(value, style = MaterialTheme.typography.bodySmall, color = Slate100, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -1095,6 +1095,11 @@ private fun StatusBadge(label: String, accent: Color) {
 
 private fun statusLabel(status: String): String = status.split("_").joinToString(" ") {
     it.replaceFirstChar { character -> character.uppercase() }
+}
+
+private fun compactTimestampLabel(label: String): String {
+    val parts = label.split(",").map { it.trim() }
+    return if (parts.size >= 3) "${parts[0]}, ${parts[2]}" else label
 }
 
 private fun sortOptionLabel(option: MobileOrderSortOption): String = when (option) {
