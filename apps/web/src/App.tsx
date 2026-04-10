@@ -48,6 +48,15 @@ const statusLabels: Record<OrderStatus, string> = {
   cancelled: "Cancelled"
 };
 
+const orderedStatuses: OrderStatus[] = [
+  "new",
+  "in_review",
+  "approved",
+  "rejected",
+  "fulfilled",
+  "cancelled"
+];
+
 const statusTone = (status: OrderStatus) => {
   switch (status) {
     case "new":
@@ -72,19 +81,6 @@ const formatTimestamp = (value: string) =>
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(value));
-
-const sortStatuses = (entries: [OrderStatus, number][]) => {
-  const order: OrderStatus[] = [
-    "new",
-    "in_review",
-    "approved",
-    "rejected",
-    "fulfilled",
-    "cancelled"
-  ];
-
-  return entries.sort((left, right) => order.indexOf(left[0]) - order.indexOf(right[0]));
-};
 
 async function readJson<T>(path: string, init?: RequestInit) {
   const response = await fetch(`${API_BASE_URL}${path}`, init);
@@ -167,14 +163,36 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
-  const groupedStatuses = sortStatuses(
-    Object.entries(
-      orders.reduce<Record<OrderStatus, number>>((accumulator, order) => {
-        accumulator[order.status] = (accumulator[order.status] ?? 0) + 1;
-        return accumulator;
-      }, {} as Record<OrderStatus, number>)
-    ) as [OrderStatus, number][]
-  );
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target;
+
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (!target.closest(".column-filter-wrap")) {
+        setIsStatusFilterOpen(false);
+      }
+
+      if (!target.closest(".row-action-menu")) {
+        setOpenActionsOrderId(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  const groupedStatuses = useMemo(() => {
+    const counts = orders.reduce<Record<OrderStatus, number>>((accumulator, order) => {
+      accumulator[order.status] = (accumulator[order.status] ?? 0) + 1;
+      return accumulator;
+    }, {} as Record<OrderStatus, number>);
+
+    return orderedStatuses.map((status) => [status, counts[status] ?? 0] as const);
+  }, [orders]);
 
   const customer = useMemo(
     () => users.find((user) => user.role === "customer") ?? null,
@@ -184,6 +202,7 @@ export default function App() {
     () => users.find((user) => user.role === "operator") ?? null,
     [users]
   );
+
   const filteredOrders = useMemo(() => {
     if (statusFilter.length === 0) {
       return orders;
@@ -300,6 +319,7 @@ export default function App() {
         })
       });
 
+      setOpenActionsOrderId(null);
       await loadDashboardData();
     } catch (submitError) {
       setActionError(
@@ -361,16 +381,20 @@ export default function App() {
         </div>
 
         <section className="table-stage">
-            <div className="table-toolbar">
-              <div>
-                <p className="eyebrow">Active queue</p>
-                <h3>Review and move orders forward</h3>
-              </div>
+          <div className="table-toolbar">
+            <div>
+              <p className="eyebrow">Active queue</p>
+              <h3>Review and move orders forward</h3>
+            </div>
 
-              <div className="toolbar-actions">
-                <button className="primary-action" onClick={() => setIsCreateOpen((current) => !current)} type="button">
-                  {isCreateOpen ? "Close create form" : "Create order"}
-                </button>
+            <div className="toolbar-actions">
+              <button
+                className="primary-action"
+                onClick={() => setIsCreateOpen((current) => !current)}
+                type="button"
+              >
+                {isCreateOpen ? "Close create form" : "Create order"}
+              </button>
             </div>
           </div>
 
@@ -412,7 +436,11 @@ export default function App() {
                   />
                 </label>
 
-                <button className="primary-action" disabled={isSubmitting || !customer} type="submit">
+                <button
+                  className="primary-action"
+                  disabled={isSubmitting || !customer}
+                  type="submit"
+                >
                   {isSubmitting ? "Submitting..." : "Create order"}
                 </button>
               </form>
@@ -451,13 +479,21 @@ export default function App() {
                     <th>Code</th>
                     <th>Title</th>
                     <th>
-                      <button className="column-sort" onClick={() => toggleSort("customer_name")} type="button">
+                      <button
+                        className="column-sort"
+                        onClick={() => toggleSort("customer_name")}
+                        type="button"
+                      >
                         Customer <span>{sortIndicator("customer_name")}</span>
                       </button>
                     </th>
                     <th>
                       <div className="column-filter-wrap">
-                        <button className="column-sort" onClick={() => toggleSort("status")} type="button">
+                        <button
+                          className="column-sort"
+                          onClick={() => toggleSort("status")}
+                          type="button"
+                        >
                           Status <span>{sortIndicator("status")}</span>
                         </button>
                         <button
@@ -469,9 +505,7 @@ export default function App() {
                         </button>
                         {isStatusFilterOpen ? (
                           <div className="filter-menu">
-                            {(
-                              ["new", "in_review", "approved", "rejected", "fulfilled", "cancelled"] as OrderStatus[]
-                            ).map((status) => (
+                            {orderedStatuses.map((status) => (
                               <label className="filter-option" key={status}>
                                 <input
                                   checked={statusFilter.includes(status)}
@@ -486,7 +520,11 @@ export default function App() {
                       </div>
                     </th>
                     <th>
-                      <button className="column-sort" onClick={() => toggleSort("updated_at")} type="button">
+                      <button
+                        className="column-sort"
+                        onClick={() => toggleSort("updated_at")}
+                        type="button"
+                      >
                         Updated <span>{sortIndicator("updated_at")}</span>
                       </button>
                     </th>
@@ -532,10 +570,7 @@ export default function App() {
                                         key={status}
                                         className="dropdown-action"
                                         disabled={isSubmitting}
-                                        onClick={() => {
-                                          setOpenActionsOrderId(null);
-                                          void handleTransition(order.id, status);
-                                        }}
+                                        onClick={() => void handleTransition(order.id, status)}
                                         type="button"
                                       >
                                         {statusLabels[status]}
