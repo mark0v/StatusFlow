@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -106,7 +107,29 @@ data class MobileHomeUiState(
     val actionMessage: String? = null
 )
 
-private enum class MobileOrderSortOption { UPDATED_DESC, UPDATED_ASC, TITLE_ASC, STATUS_ASC }
+internal enum class MobileOrderSortOption { UPDATED_DESC, UPDATED_ASC, TITLE_ASC, STATUS_ASC }
+
+object MobileUiTags {
+    const val SCREEN_TITLE = "screen_title"
+    const val SCROLL_CONTENT = "scroll_content"
+    const val QUEUE_OVERVIEW = "queue_overview"
+    const val LIST_CONTROLS = "list_controls"
+    const val SEARCH_INPUT = "search_input"
+    const val SORT_BUTTON = "sort_button"
+    const val CREATE_CARD = "create_card"
+    const val CREATE_TOGGLE = "create_toggle"
+    const val CREATE_TITLE_INPUT = "create_title_input"
+    const val CREATE_DESCRIPTION_INPUT = "create_description_input"
+    const val CREATE_SUBMIT = "create_submit"
+    const val DETAIL_SCREEN = "detail_screen"
+    const val DETAIL_UNAVAILABLE = "detail_unavailable"
+    const val COMMENT_INPUT = "comment_input"
+    const val COMMENT_SUBMIT = "comment_submit"
+    const val EMPTY_QUEUE = "empty_queue"
+
+    fun orderCard(code: String) = "order_card_$code"
+    fun statusChip(status: String) = "status_chip_$status"
+}
 
 class MobileHomeViewModel(
     private val repository: StatusFlowApiRepository = StatusFlowApiRepository()
@@ -343,7 +366,7 @@ fun MobileHomeScreen(
         ) {
             PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 24.dp),
+                    modifier = Modifier.fillMaxSize().testTag(MobileUiTags.SCROLL_CONTENT).padding(horizontal = 20.dp, vertical = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
@@ -504,8 +527,8 @@ fun MobileHomeScreen(
 }
 
 @Composable
-private fun ScreenTitle() {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+internal fun ScreenTitle() {
+    Column(modifier = Modifier.testTag(MobileUiTags.SCREEN_TITLE), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             "MOBILE OPS",
             style = MaterialTheme.typography.labelLarge,
@@ -529,7 +552,7 @@ private fun ScreenTitle() {
 
 @Composable
 private fun ApiCard(apiBaseUrl: String) {
-    ShellCard {
+    ShellCard(modifier = Modifier.testTag(MobileUiTags.CREATE_CARD)) {
         BoxWithConstraints {
             val isCompact = maxWidth < 360.dp
             if (isCompact) {
@@ -575,14 +598,14 @@ private fun ApiCard(apiBaseUrl: String) {
 }
 
 @Composable
-private fun QueueOverviewCard(
+internal fun QueueOverviewCard(
     totalOrders: Int,
     visibleOrders: Int,
     selectedOrderCode: String?,
     activeFilterLabel: String?
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.QUEUE_OVERVIEW),
         colors = CardDefaults.cardColors(containerColor = Navy500),
         shape = RoundedCornerShape(28.dp),
         border = BorderStroke(1.dp, Blue300.copy(alpha = 0.3f))
@@ -658,7 +681,7 @@ private fun QueueOverviewCard(
 }
 
 @Composable
-private fun CreateOrderCard(
+internal fun CreateOrderCard(
     title: String,
     description: String,
     isExpanded: Boolean,
@@ -670,7 +693,7 @@ private fun CreateOrderCard(
     onRefresh: () -> Unit,
     onToggleExpanded: () -> Unit
 ) {
-    ShellCard {
+    ShellCard(modifier = Modifier.testTag(MobileUiTags.LIST_CONTROLS)) {
         BoxWithConstraints {
             val isCompact = maxWidth < 360.dp
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -689,6 +712,7 @@ private fun CreateOrderCard(
                             enabled = !isSubmitting,
                             onClick = onToggleExpanded,
                             modifier = Modifier
+                                .testTag(MobileUiTags.CREATE_TOGGLE)
                                 .fillMaxWidth()
                                 .semantics {
                                     stateDescription = if (isExpanded) "Composer expanded" else "Composer collapsed"
@@ -722,9 +746,11 @@ private fun CreateOrderCard(
                         Button(
                             enabled = !isSubmitting,
                             onClick = onToggleExpanded,
-                            modifier = Modifier.semantics {
-                                stateDescription = if (isExpanded) "Composer expanded" else "Composer collapsed"
-                            },
+                            modifier = Modifier
+                                .testTag(MobileUiTags.CREATE_TOGGLE)
+                                .semantics {
+                                    stateDescription = if (isExpanded) "Composer expanded" else "Composer collapsed"
+                                },
                             shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (isExpanded) Navy700 else Blue400,
@@ -743,7 +769,7 @@ private fun CreateOrderCard(
                         value = title,
                         onValueChange = onTitleChange,
                         label = { Text("Order title") },
-                        modifier = Modifier.fillMaxWidth().semantics {
+                        modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.CREATE_TITLE_INPUT).semantics {
                             contentDescription = "Order title"
                         },
                         singleLine = true
@@ -752,7 +778,7 @@ private fun CreateOrderCard(
                         value = description,
                         onValueChange = onDescriptionChange,
                         label = { Text("Operator brief") },
-                        modifier = Modifier.fillMaxWidth().semantics {
+                        modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.CREATE_DESCRIPTION_INPUT).semantics {
                             contentDescription = "Operator brief"
                         },
                         minLines = 3
@@ -769,7 +795,7 @@ private fun CreateOrderCard(
                                     disabledContainerColor = Navy600,
                                     disabledContentColor = Slate300
                                 ),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.CREATE_SUBMIT)
                             ) {
                                 Text(if (isSubmitting) "Submitting..." else "Create")
                             }
@@ -801,7 +827,7 @@ private fun CreateOrderCard(
                                     disabledContainerColor = Navy600,
                                     disabledContentColor = Slate300
                                 ),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f).testTag(MobileUiTags.CREATE_SUBMIT)
                             ) {
                                 Text(if (isSubmitting) "Submitting..." else "Create")
                             }
@@ -859,7 +885,7 @@ private fun QueueSectionHeader(title: String, subtitle: String) {
 }
 
 @Composable
-private fun ListControlsCard(
+internal fun ListControlsCard(
     searchQuery: String,
     selectedStatus: String?,
     availableStatuses: List<String>,
@@ -877,7 +903,7 @@ private fun ListControlsCard(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     label = { Text("Search code, title, or customer") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.SEARCH_INPUT),
                     singleLine = true
                 )
                 if (isCompact) {
@@ -898,7 +924,7 @@ private fun ListControlsCard(
                             onClick = onToggleSort,
                             accent = Blue400,
                             stateDescription = sortOptionLabel(sortOption),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.SORT_BUTTON)
                         )
                         PillButton(
                             label = "Clear filter",
@@ -915,7 +941,7 @@ private fun ListControlsCard(
                             onClick = onToggleSort,
                             accent = Blue400,
                             stateDescription = sortOptionLabel(sortOption),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f).testTag(MobileUiTags.SORT_BUTTON)
                         )
                         if (selectedStatus != null) {
                             PillButton(
@@ -936,9 +962,11 @@ private fun ListControlsCard(
                                 val active = selectedStatus == status
                                 Button(
                                     onClick = { onSelectStatus(status) },
-                                    modifier = Modifier.semantics {
-                                        stateDescription = if (active) "Selected" else "Not selected"
-                                    },
+                                    modifier = Modifier
+                                        .testTag(MobileUiTags.statusChip(status))
+                                        .semantics {
+                                            stateDescription = if (active) "Selected" else "Not selected"
+                                        },
                                     shape = RoundedCornerShape(18.dp),
                                     border = BorderStroke(1.dp, if (active) Blue300 else Slate300.copy(alpha = 0.26f)),
                                     colors = ButtonDefaults.buttonColors(
@@ -958,7 +986,7 @@ private fun ListControlsCard(
 }
 
 @Composable
-private fun DetailScreenCard(
+internal fun DetailScreenCard(
     detail: MobileOrderDetail,
     allowedTransitions: List<String>,
     isSubmitting: Boolean,
@@ -971,7 +999,7 @@ private fun DetailScreenCard(
 ) {
     BoxWithConstraints {
         val isCompact = maxWidth < 360.dp
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.testTag(MobileUiTags.DETAIL_SCREEN), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Navy500),
@@ -1079,7 +1107,7 @@ private fun DetailScreenCard(
                         disabledContainerColor = Navy600,
                         disabledContentColor = Slate300
                     ),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_SUBMIT)
                 ) {
                     Text(if (isSubmitting) "Sending..." else "Post comment")
                 }
@@ -1087,7 +1115,7 @@ private fun DetailScreenCard(
                     value = commentBody,
                     onValueChange = onCommentBodyChange,
                     label = { Text("Add operator note") },
-                    modifier = Modifier.fillMaxWidth().semantics {
+                    modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_INPUT).semantics {
                         contentDescription = "Add operator note"
                     },
                     minLines = 2
@@ -1105,8 +1133,8 @@ private fun DetailScreenCard(
 }
 
 @Composable
-private fun DetailUnavailableCard(errorMessage: String?, onBack: () -> Unit, onRefresh: () -> Unit) {
-    ShellCard {
+internal fun DetailUnavailableCard(errorMessage: String?, onBack: () -> Unit, onRefresh: () -> Unit) {
+    ShellCard(modifier = Modifier.testTag(MobileUiTags.DETAIL_UNAVAILABLE)) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             FeedbackCard(
                 title = "Selected order is unavailable",
@@ -1138,8 +1166,8 @@ private fun DetailUnavailableCard(errorMessage: String?, onBack: () -> Unit, onR
 }
 
 @Composable
-private fun EmptyQueueCard(title: String, body: String, eyebrow: String, accent: Color) {
-    ShellCard {
+internal fun EmptyQueueCard(title: String, body: String, eyebrow: String, accent: Color) {
+    ShellCard(modifier = Modifier.testTag(MobileUiTags.EMPTY_QUEUE)) {
         BoxWithConstraints {
             val isCompact = maxWidth < 360.dp
             Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1179,10 +1207,11 @@ private fun EmptyQueueCard(title: String, body: String, eyebrow: String, accent:
 }
 
 @Composable
-private fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectOrder: (String) -> Unit) {
+internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectOrder: (String) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(MobileUiTags.orderCard(order.code))
             .semantics {
                 role = Role.Button
                 contentDescription = "Open order ${order.code} for ${order.title}"
@@ -1312,9 +1341,9 @@ private fun DetailSectionCard(title: String, subtitle: String, content: @Composa
 }
 
 @Composable
-private fun ShellCard(content: @Composable () -> Unit) {
+private fun ShellCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.96f)),
         shape = RoundedCornerShape(26.dp),
         border = BorderStroke(1.dp, Slate300.copy(alpha = 0.18f))
