@@ -685,32 +685,48 @@ private fun DetailScreenCard(
     onAddComment: () -> Unit,
     onBack: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Navy500),
-        shape = RoundedCornerShape(28.dp),
-        border = BorderStroke(1.dp, Blue300.copy(alpha = 0.28f))
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(
-                onClick = onBack,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100)
-            ) {
-                Text("Back to queue")
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Navy500),
+            shape = RoundedCornerShape(28.dp),
+            border = BorderStroke(1.dp, Blue300.copy(alpha = 0.28f))
+        ) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = onBack,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100)
+                ) {
+                    Text("Back to queue")
+                }
+                Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                Text(detail.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
+                    Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    CompactInfoCard(
+                        title = "Customer",
+                        value = detail.customerName,
+                        modifier = Modifier.weight(1f)
+                    )
+                    CompactInfoCard(
+                        title = "Comments",
+                        value = detail.comments.size.toString(),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Text(detail.description, style = MaterialTheme.typography.bodyLarge, color = Color.White)
             }
-            Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
-            Text(detail.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
-                Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
-            }
-            Text("Customer ${detail.customerName}", style = MaterialTheme.typography.bodyMedium, color = Slate200)
-            Text(detail.description, style = MaterialTheme.typography.bodyLarge, color = Color.White)
-            if (actionMessage != null) {
-                StatusMessageCard(title = "Latest action", body = actionMessage)
-            }
-            SectionLabel(title = "Next steps", subtitle = "Move the order through the allowed lifecycle only.")
+        }
+
+        if (actionMessage != null) {
+            StatusMessageCard(title = "Latest action", body = actionMessage)
+        }
+
+        DetailSectionCard(title = "Next steps", subtitle = "Move the order through the allowed lifecycle only.") {
             if (allowedTransitions.isEmpty()) {
                 Text("This order is already in a terminal state.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
             } else {
@@ -733,11 +749,29 @@ private fun DetailScreenCard(
                     }
                 }
             }
-            SectionLabel(title = "History", subtitle = "Most recent workflow events.")
+        }
+
+        DetailSectionCard(title = "History", subtitle = "Most recent workflow events.") {
             detail.history.takeLast(4).reversed().forEach { event ->
                 TimelineEntry(event.summary, "${event.actorName} | ${event.changedAtLabel}", event.reason)
             }
-            SectionLabel(title = "Comments", subtitle = "Leave a note for the next operator.")
+        }
+
+        DetailSectionCard(title = "Comments", subtitle = "Leave a note for the next operator.") {
+            Button(
+                enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
+                onClick = onAddComment,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Mint400,
+                    contentColor = Navy900,
+                    disabledContainerColor = Navy600,
+                    disabledContentColor = Slate300
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isSubmitting) "Sending..." else "Post comment")
+            }
             OutlinedTextField(
                 value = commentBody,
                 onValueChange = onCommentBodyChange,
@@ -745,22 +779,6 @@ private fun DetailScreenCard(
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
-                    onClick = onAddComment,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Mint400,
-                        contentColor = Navy900,
-                        disabledContainerColor = Navy600,
-                        disabledContentColor = Slate300
-                    ),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (isSubmitting) "Sending..." else "Post comment")
-                }
-            }
             if (detail.comments.isEmpty()) {
                 Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
             } else {
@@ -835,6 +853,16 @@ private fun StatusMessageCard(title: String, body: String) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = Mint400, fontWeight = FontWeight.SemiBold)
             Text(body, style = MaterialTheme.typography.bodyMedium, color = Slate100)
+        }
+    }
+}
+
+@Composable
+private fun DetailSectionCard(title: String, subtitle: String, content: @Composable () -> Unit) {
+    ShellCard {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionLabel(title = title, subtitle = subtitle)
+            content()
         }
     }
 }
