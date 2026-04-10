@@ -292,6 +292,7 @@ fun MobileHomeScreen(
     var description by remember { mutableStateOf("") }
     var commentBody by remember { mutableStateOf("") }
     var isShowingDetail by rememberSaveable { mutableStateOf(false) }
+    var isCreateExpanded by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var sortOptionName by rememberSaveable { mutableStateOf(MobileOrderSortOption.UPDATED_DESC.name) }
@@ -422,12 +423,19 @@ fun MobileHomeScreen(
                         CreateOrderCard(
                             title = title,
                             description = description,
+                            isExpanded = isCreateExpanded,
                             isSubmitting = state.isSubmitting,
                             isLoading = state.isLoading || state.isRefreshing,
                             onTitleChange = { title = it },
                             onDescriptionChange = { description = it },
-                            onCreate = { onCreateOrder(title.trim(), description.trim()); title = ""; description = "" },
-                            onRefresh = onRefresh
+                            onCreate = {
+                                onCreateOrder(title.trim(), description.trim())
+                                title = ""
+                                description = ""
+                                isCreateExpanded = false
+                            },
+                            onRefresh = onRefresh,
+                            onToggleExpanded = { isCreateExpanded = !isCreateExpanded }
                         )
                     }
                     item { ApiCard(state.apiBaseUrl) }
@@ -541,45 +549,93 @@ private fun QueueOverviewCard(
 private fun CreateOrderCard(
     title: String,
     description: String,
+    isExpanded: Boolean,
     isSubmitting: Boolean,
     isLoading: Boolean,
     onTitleChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onCreate: () -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onToggleExpanded: () -> Unit
 ) {
     ShellCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SectionLabel(title = "Create order", subtitle = "Capture new work without leaving the queue.")
-            OutlinedTextField(
-                value = title,
-                onValueChange = onTitleChange,
-                label = { Text("Order title") },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            OutlinedTextField(
-                value = description,
-                onValueChange = onDescriptionChange,
-                label = { Text("Operator brief") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                    Text("Create order", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isExpanded) "Capture new work without leaving the queue."
+                        else "Open a compact composer when you need to add work.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Slate300
+                    )
+                }
                 Button(
-                    enabled = !isSubmitting && title.length >= 3,
-                    onClick = onCreate,
+                    enabled = !isSubmitting,
+                    onClick = onToggleExpanded,
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Blue400,
-                        contentColor = Navy900,
+                        containerColor = if (isExpanded) Navy700 else Blue400,
+                        contentColor = if (isExpanded) Slate100 else Navy900,
                         disabledContainerColor = Navy600,
                         disabledContentColor = Slate300
-                    ),
-                    modifier = Modifier.weight(1f)
+                    )
                 ) {
-                    Text(if (isSubmitting) "Submitting..." else "Create")
+                    Text(if (isExpanded) "Collapse" else "New order")
                 }
+            }
+
+            if (isExpanded) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = onTitleChange,
+                    label = { Text("Order title") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = onDescriptionChange,
+                    label = { Text("Operator brief") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        enabled = !isSubmitting && title.length >= 3,
+                        onClick = onCreate,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Blue400,
+                            contentColor = Navy900,
+                            disabledContainerColor = Navy600,
+                            disabledContentColor = Slate300
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (isSubmitting) "Submitting..." else "Create")
+                    }
+                    Button(
+                        enabled = !isLoading && !isSubmitting,
+                        onClick = onRefresh,
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Slate300.copy(alpha = 0.5f)),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Navy700,
+                            contentColor = Slate100,
+                            disabledContainerColor = Navy600,
+                            disabledContentColor = Slate300
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Refresh")
+                    }
+                }
+            } else {
                 Button(
                     enabled = !isLoading && !isSubmitting,
                     onClick = onRefresh,
@@ -591,7 +647,7 @@ private fun CreateOrderCard(
                         disabledContainerColor = Navy600,
                         disabledContentColor = Slate300
                     ),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Refresh")
                 }
