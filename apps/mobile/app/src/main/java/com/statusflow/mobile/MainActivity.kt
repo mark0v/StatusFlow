@@ -271,18 +271,28 @@ fun MobileHomeScreen(
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var commentBody by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
     var statusFilter by remember { mutableStateOf<String?>(null) }
     var sortOption by remember { mutableStateOf(MobileOrderSortOption.UPDATED_DESC) }
 
     val availableStatuses = state.orders.map { it.rawStatus }.distinct()
-    val visibleOrders = state.orders.filter { statusFilter == null || it.rawStatus == statusFilter }.let { orders ->
-        when (sortOption) {
-            MobileOrderSortOption.UPDATED_DESC -> orders
-            MobileOrderSortOption.UPDATED_ASC -> orders.reversed()
-            MobileOrderSortOption.TITLE_ASC -> orders.sortedBy { it.title.lowercase() }
-            MobileOrderSortOption.STATUS_ASC -> orders.sortedWith(compareBy<MobileOrderSummary> { statusLabel(it.rawStatus) }.thenBy { it.title.lowercase() })
+    val normalizedQuery = searchQuery.trim().lowercase()
+    val visibleOrders = state.orders
+        .filter { statusFilter == null || it.rawStatus == statusFilter }
+        .filter { order ->
+            normalizedQuery.isBlank() ||
+                order.code.lowercase().contains(normalizedQuery) ||
+                order.title.lowercase().contains(normalizedQuery) ||
+                order.customerName.lowercase().contains(normalizedQuery)
         }
-    }
+        .let { orders ->
+            when (sortOption) {
+                MobileOrderSortOption.UPDATED_DESC -> orders
+                MobileOrderSortOption.UPDATED_ASC -> orders.reversed()
+                MobileOrderSortOption.TITLE_ASC -> orders.sortedBy { it.title.lowercase() }
+                MobileOrderSortOption.STATUS_ASC -> orders.sortedWith(compareBy<MobileOrderSummary> { statusLabel(it.rawStatus) }.thenBy { it.title.lowercase() })
+            }
+        }
 
     Scaffold { padding ->
         Box(
@@ -312,9 +322,11 @@ fun MobileHomeScreen(
                     }
                     item {
                         ListControlsCard(
+                            searchQuery = searchQuery,
                             selectedStatus = statusFilter,
                             availableStatuses = availableStatuses,
                             sortOption = sortOption,
+                            onSearchQueryChange = { searchQuery = it },
                             onSelectStatus = { selected -> statusFilter = if (statusFilter == selected) null else selected },
                             onToggleSort = {
                                 sortOption = when (sortOption) {
@@ -346,11 +358,11 @@ fun MobileHomeScreen(
                             if (visibleOrders.isEmpty()) {
                                 item {
                                     EmptyQueueCard(
-                                        title = if (state.orders.isEmpty()) "No orders yet" else "No orders match this filter",
+                                        title = if (state.orders.isEmpty()) "No orders yet" else "No orders match your current view",
                                         body = if (state.orders.isEmpty()) {
                                             "Create the first order from this screen or pull down to refresh when the backend receives new work."
                                         } else {
-                                            "Clear the current filter or change the sort to inspect a different slice of the queue."
+                                            "Try clearing the current filter, editing the search text, or changing the sort to inspect a different slice of the queue."
                                         }
                                     )
                                 }
@@ -415,15 +427,23 @@ private fun CreateOrderCard(
 
 @Composable
 private fun ListControlsCard(
+    searchQuery: String,
     selectedStatus: String?,
     availableStatuses: List<String>,
     sortOption: MobileOrderSortOption,
+    onSearchQueryChange: (String) -> Unit,
     onSelectStatus: (String) -> Unit,
     onToggleSort: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Queue controls", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                label = { Text("Search orders") },
+                modifier = Modifier.fillMaxWidth()
+            )
             Text("Sort: ${sortOptionLabel(sortOption)}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onToggleSort) { Text("Change sort") }
