@@ -921,14 +921,31 @@ private fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectOr
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
+                    Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isSelected) "Ready in focus lane" else "Tap to open details",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isSelected) Mint400 else Slate300
+                    )
+                }
                 StatusBadge(label = order.statusLabel, accent = order.statusColor)
             }
             Text(order.title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
-            Text("Customer ${order.customerName}", style = MaterialTheme.typography.bodyMedium, color = Slate200)
-            Text("Updated ${order.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate300)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                CompactMetaPill(
+                    label = "Customer",
+                    value = order.customerName,
+                    modifier = Modifier.weight(1f)
+                )
+                CompactMetaPill(
+                    label = "Updated",
+                    value = order.updatedAtLabel,
+                    modifier = Modifier.weight(1f)
+                )
+            }
             if (isSelected) {
-                Text("Selected for detail view", style = MaterialTheme.typography.bodySmall, color = Mint400, fontWeight = FontWeight.Medium)
+                FeedbackInline(label = "Selected for detail view", accent = Mint400)
             }
         }
     }
@@ -1020,6 +1037,35 @@ private fun CompactInfoCard(title: String, value: String, modifier: Modifier = M
             Text(title, style = MaterialTheme.typography.labelSmall, color = Slate300)
             Text(value, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+    }
+}
+
+@Composable
+private fun CompactMetaPill(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Navy900.copy(alpha = 0.24f)),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Slate300)
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = Slate100, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun FeedbackInline(label: String, accent: Color) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(accent, RoundedCornerShape(999.dp))
+        )
+        Text(label, style = MaterialTheme.typography.bodySmall, color = accent, fontWeight = FontWeight.Medium)
     }
 }
 
