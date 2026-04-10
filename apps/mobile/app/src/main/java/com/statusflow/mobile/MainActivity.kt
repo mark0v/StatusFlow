@@ -41,6 +41,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -144,11 +152,16 @@ class MobileHomeViewModel(
 
     fun selectOrder(orderId: String) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(selectedOrderId = orderId, errorMessage = null)
+            _uiState.value = _uiState.value.copy(
+                selectedOrderId = orderId,
+                selectedOrderDetail = null,
+                errorMessage = null
+            )
             runCatching { repository.fetchOrderDetail(orderId) }
                 .onSuccess { detail -> _uiState.value = _uiState.value.copy(selectedOrderDetail = detail) }
                 .onFailure { throwable ->
                     _uiState.value = _uiState.value.copy(
+                        selectedOrderDetail = null,
                         errorMessage = throwable.message ?: "Failed to load order details."
                     )
                 }
@@ -396,25 +409,37 @@ fun MobileHomeScreen(
                             }
                         }
                         else -> {
-                            if (isShowingDetail && state.selectedOrderDetail != null) {
+                            if (isShowingDetail && state.selectedOrderId != null) {
                                 item {
                                     QueueSectionHeader(
-                                        title = "Selected order",
-                                        subtitle = "Review details, update status, and leave context for the next operator."
+                                        title = if (state.selectedOrderDetail != null) "Selected order" else "Order detail",
+                                        subtitle = if (state.selectedOrderDetail != null) {
+                                            "Review details, update status, and leave context for the next operator."
+                                        } else {
+                                            "Recover gracefully when a selected order is temporarily unavailable."
+                                        }
                                     )
                                 }
                                 item {
-                                    DetailScreenCard(
-                                        detail = state.selectedOrderDetail,
-                                        allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
-                                        isSubmitting = state.isSubmitting,
-                                        actionMessage = state.actionMessage,
-                                        commentBody = commentBody,
-                                        onCommentBodyChange = { commentBody = it },
-                                        onTransitionOrder = onTransitionOrder,
-                                        onAddComment = { onAddComment(commentBody.trim()) },
-                                        onBack = { isShowingDetail = false }
-                                    )
+                                    if (state.selectedOrderDetail != null) {
+                                        DetailScreenCard(
+                                            detail = state.selectedOrderDetail,
+                                            allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
+                                            isSubmitting = state.isSubmitting,
+                                            actionMessage = state.actionMessage,
+                                            commentBody = commentBody,
+                                            onCommentBodyChange = { commentBody = it },
+                                            onTransitionOrder = onTransitionOrder,
+                                            onAddComment = { onAddComment(commentBody.trim()) },
+                                            onBack = { isShowingDetail = false }
+                                        )
+                                    } else {
+                                        DetailUnavailableCard(
+                                            errorMessage = state.errorMessage,
+                                            onBack = { isShowingDetail = false },
+                                            onRefresh = onRefresh
+                                        )
+                                    }
                                 }
                             } else {
                                 item {
@@ -488,6 +513,7 @@ private fun ScreenTitle() {
         )
         Text(
             "StatusFlow",
+            modifier = Modifier.semantics { heading() },
             style = MaterialTheme.typography.headlineMedium,
             color = Color.White,
             fontWeight = FontWeight.Bold
@@ -609,6 +635,9 @@ private fun CreateOrderCard(
                 Button(
                     enabled = !isSubmitting,
                     onClick = onToggleExpanded,
+                    modifier = Modifier.semantics {
+                        stateDescription = if (isExpanded) "Composer expanded" else "Composer collapsed"
+                    },
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isExpanded) Navy700 else Blue400,
@@ -626,14 +655,18 @@ private fun CreateOrderCard(
                     value = title,
                     onValueChange = onTitleChange,
                     label = { Text("Order title") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().semantics {
+                        contentDescription = "Order title"
+                    },
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = description,
                     onValueChange = onDescriptionChange,
                     label = { Text("Operator brief") },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().semantics {
+                        contentDescription = "Operator brief"
+                    },
                     minLines = 3
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
@@ -691,7 +724,13 @@ private fun CreateOrderCard(
 @Composable
 private fun QueueSectionHeader(title: String, subtitle: String) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
+        Text(
+            title,
+            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.titleLarge,
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold
+        )
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Slate300)
     }
 }
@@ -725,6 +764,7 @@ private fun ListControlsCard(
                     label = "Sort",
                     onClick = onToggleSort,
                     accent = Blue400,
+                    stateDescription = sortOptionLabel(sortOption),
                     modifier = Modifier.weight(1f)
                 )
                 if (selectedStatus != null) {
@@ -732,6 +772,7 @@ private fun ListControlsCard(
                         label = "Clear filter",
                         onClick = { onSelectStatus(selectedStatus) },
                         accent = Slate200,
+                        stateDescription = "Status filter active",
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -744,6 +785,9 @@ private fun ListControlsCard(
                             val active = selectedStatus == status
                             Button(
                                 onClick = { onSelectStatus(status) },
+                                modifier = Modifier.semantics {
+                                    stateDescription = if (active) "Selected" else "Not selected"
+                                },
                                 shape = RoundedCornerShape(18.dp),
                                 border = BorderStroke(1.dp, if (active) Blue300 else Slate300.copy(alpha = 0.26f)),
                                 colors = ButtonDefaults.buttonColors(
@@ -870,7 +914,9 @@ private fun DetailScreenCard(
                 value = commentBody,
                 onValueChange = onCommentBodyChange,
                 label = { Text("Add operator note") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().semantics {
+                    contentDescription = "Add operator note"
+                },
                 minLines = 2
             )
             if (detail.comments.isEmpty()) {
@@ -878,6 +924,39 @@ private fun DetailScreenCard(
             } else {
                 detail.comments.reversed().forEach { comment ->
                     TimelineEntry(comment.authorName, comment.createdAtLabel, comment.body)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailUnavailableCard(errorMessage: String?, onBack: () -> Unit, onRefresh: () -> Unit) {
+    ShellCard {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            FeedbackCard(
+                title = "Selected order is unavailable",
+                body = errorMessage ?: "The selected order could not be loaded right now. Refresh the queue or go back to pick another item.",
+                accent = Amber300,
+                surface = Navy700,
+                eyebrow = "DETAIL STATE"
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = onBack,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Back to queue")
+                }
+                Button(
+                    onClick = onRefresh,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Blue400, contentColor = Navy900),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Refresh")
                 }
             }
         }
@@ -910,7 +989,14 @@ private fun EmptyQueueCard(title: String, body: String, eyebrow: String, accent:
 @Composable
 private fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectOrder: (String) -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onSelectOrder(order.id) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics {
+                role = Role.Button
+                contentDescription = "Open order ${order.code} for ${order.title}"
+                stateDescription = if (isSelected) "Selected" else "Not selected"
+            }
+            .clickable { onSelectOrder(order.id) },
         colors = CardDefaults.cardColors(containerColor = if (isSelected) Navy500 else Navy700),
         shape = RoundedCornerShape(24.dp),
         border = BorderStroke(1.dp, if (isSelected) Blue300.copy(alpha = 0.55f) else Slate300.copy(alpha = 0.18f))
@@ -931,7 +1017,14 @@ private fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectOr
                 }
                 StatusBadge(label = order.statusLabel, accent = order.statusColor)
             }
-            Text(order.title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text(
+                order.title,
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 CompactMetaPill(
                     label = "Customer",
@@ -969,7 +1062,9 @@ private fun TimelineEntry(title: String, meta: String, body: String) {
 @Composable
 private fun FeedbackCard(title: String, body: String, accent: Color, surface: Color, eyebrow: String) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().semantics {
+            liveRegion = LiveRegionMode.Polite
+        },
         colors = CardDefaults.cardColors(containerColor = surface),
         shape = RoundedCornerShape(22.dp),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.25f))
@@ -1070,10 +1165,20 @@ private fun FeedbackInline(label: String, accent: Color) {
 }
 
 @Composable
-private fun PillButton(label: String, onClick: () -> Unit, accent: Color, modifier: Modifier = Modifier) {
+private fun PillButton(
+    label: String,
+    onClick: () -> Unit,
+    accent: Color,
+    modifier: Modifier = Modifier,
+    stateDescription: String? = null
+) {
     Button(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.then(
+            Modifier.semantics {
+                stateDescription?.let { this.stateDescription = it }
+            }
+        ),
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, accent.copy(alpha = 0.28f)),
         colors = ButtonDefaults.buttonColors(containerColor = Navy600, contentColor = Slate100)
@@ -1086,6 +1191,7 @@ private fun PillButton(label: String, onClick: () -> Unit, accent: Color, modifi
 private fun StatusBadge(label: String, accent: Color) {
     Box(
         modifier = Modifier
+            .semantics { contentDescription = "Status $label" }
             .background(accent.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
