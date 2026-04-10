@@ -360,11 +360,41 @@ fun MobileHomeScreen(
                             }
                         )
                     }
-                    if (state.actionMessage != null) item { StatusMessageCard("Latest action", state.actionMessage) }
+                    if (state.actionMessage != null) {
+                        item {
+                            FeedbackCard(
+                                title = "Latest action",
+                                body = state.actionMessage,
+                                accent = Mint400,
+                                surface = Navy700,
+                                eyebrow = "ACTION"
+                            )
+                        }
+                    }
 
                     when {
-                        state.isLoading -> item { StatusMessageCard("Syncing orders", "Fetching the latest order list from the API.") }
-                        state.errorMessage != null -> item { StatusMessageCard("Sync failed", state.errorMessage) }
+                        state.isLoading -> {
+                            item {
+                                FeedbackCard(
+                                    title = "Syncing orders",
+                                    body = "Fetching the latest order list from the API and rebuilding the queue snapshot.",
+                                    accent = Blue300,
+                                    surface = Navy500,
+                                    eyebrow = "LIVE SYNC"
+                                )
+                            }
+                        }
+                        state.errorMessage != null -> {
+                            item {
+                                FeedbackCard(
+                                    title = "Sync failed",
+                                    body = state.errorMessage,
+                                    accent = Red300,
+                                    surface = Navy700,
+                                    eyebrow = "ERROR"
+                                )
+                            }
+                        }
                         else -> {
                             if (isShowingDetail && state.selectedOrderDetail != null) {
                                 item {
@@ -401,7 +431,9 @@ fun MobileHomeScreen(
                                                 "Create the first order from this screen or pull down to refresh when the backend receives new work."
                                             } else {
                                                 "Try clearing the current filter, editing the search text, or changing the sort to inspect a different slice of the queue."
-                                            }
+                                            },
+                                            eyebrow = if (state.orders.isEmpty()) "EMPTY QUEUE" else "FILTERED VIEW",
+                                            accent = if (state.orders.isEmpty()) Blue300 else Amber300
                                         )
                                     }
                                 } else {
@@ -779,7 +811,13 @@ private fun DetailScreenCard(
         }
 
         if (actionMessage != null) {
-            StatusMessageCard(title = "Latest action", body = actionMessage)
+            FeedbackCard(
+                title = "Latest action",
+                body = actionMessage,
+                accent = Mint400,
+                surface = Navy700,
+                eyebrow = "ACTION"
+            )
         }
 
         DetailSectionCard(title = "Next steps", subtitle = "Move the order through the allowed lifecycle only.") {
@@ -847,11 +885,24 @@ private fun DetailScreenCard(
 }
 
 @Composable
-private fun EmptyQueueCard(title: String, body: String) {
+private fun EmptyQueueCard(title: String, body: String, eyebrow: String, accent: Color) {
     ShellCard {
         Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(eyebrow, style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.SemiBold)
             Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
             Text(body, style = MaterialTheme.typography.bodyLarge, color = Slate200)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                CompactInfoCard(
+                    title = "Next move",
+                    value = if (eyebrow == "EMPTY QUEUE") "Create order" else "Clear filters",
+                    modifier = Modifier.weight(1f)
+                )
+                CompactInfoCard(
+                    title = "Mode",
+                    value = if (eyebrow == "EMPTY QUEUE") "Fresh start" else "Narrow slice",
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }
@@ -899,15 +950,16 @@ private fun TimelineEntry(title: String, meta: String, body: String) {
 }
 
 @Composable
-private fun StatusMessageCard(title: String, body: String) {
+private fun FeedbackCard(title: String, body: String, accent: Color, surface: Color, eyebrow: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Navy700),
+        colors = CardDefaults.cardColors(containerColor = surface),
         shape = RoundedCornerShape(22.dp),
-        border = BorderStroke(1.dp, Mint400.copy(alpha = 0.25f))
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.25f))
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Mint400, fontWeight = FontWeight.SemiBold)
+            Text(eyebrow, style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.SemiBold)
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
             Text(body, style = MaterialTheme.typography.bodyMedium, color = Slate100)
         }
     }
