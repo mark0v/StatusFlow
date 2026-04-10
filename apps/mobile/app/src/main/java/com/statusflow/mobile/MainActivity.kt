@@ -77,6 +77,13 @@ data class MobileHomeUiState(
     val actionMessage: String? = null
 )
 
+private enum class MobileOrderSortOption {
+    UPDATED_DESC,
+    UPDATED_ASC,
+    TITLE_ASC,
+    STATUS_ASC
+}
+
 class MobileHomeViewModel(
     private val repository: StatusFlowApiRepository = StatusFlowApiRepository()
 ) : ViewModel() {
@@ -98,10 +105,8 @@ class MobileHomeViewModel(
 
             runCatching {
                 val dashboard = repository.fetchDashboardData()
-                val selectedOrderId =
-                    currentSelection ?: dashboard.orders.firstOrNull()?.id
-                val detail =
-                    selectedOrderId?.let { orderId -> repository.fetchOrderDetail(orderId) }
+                val selectedOrderId = currentSelection ?: dashboard.orders.firstOrNull()?.id
+                val detail = selectedOrderId?.let { orderId -> repository.fetchOrderDetail(orderId) }
 
                 Triple(dashboard, selectedOrderId, detail)
             }.onSuccess { (dashboard, selectedOrderId, detail) ->
@@ -167,8 +172,7 @@ class MobileHomeViewModel(
                 )
                 val dashboard = repository.fetchDashboardData()
                 val newestOrder = dashboard.orders.firstOrNull()
-                val detail =
-                    newestOrder?.id?.let { orderId -> repository.fetchOrderDetail(orderId) }
+                val detail = newestOrder?.id?.let { orderId -> repository.fetchOrderDetail(orderId) }
 
                 Triple(dashboard, newestOrder?.id, detail)
             }.onSuccess { (dashboard, selectedOrderId, detail) ->
@@ -330,6 +334,23 @@ fun MobileHomeScreen(
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var commentBody by remember { mutableStateOf("") }
+    var statusFilter by remember { mutableStateOf<String?>(null) }
+    var sortOption by remember { mutableStateOf(MobileOrderSortOption.UPDATED_DESC) }
+
+    val availableStatuses = state.orders.map { order -> order.rawStatus }.distinct()
+    val visibleOrders = state.orders
+        .filter { order -> statusFilter == null || order.rawStatus == statusFilter }
+        .let { orders ->
+            when (sortOption) {
+                MobileOrderSortOption.UPDATED_DESC -> orders
+                MobileOrderSortOption.UPDATED_ASC -> orders.reversed()
+                MobileOrderSortOption.TITLE_ASC -> orders.sortedBy { order -> order.title.lowercase() }
+                MobileOrderSortOption.STATUS_ASC -> orders.sortedWith(
+                    compareBy<MobileOrderSummary> { order -> statusLabel(order.rawStatus) }
+                        .thenBy { order -> order.title.lowercase() }
+                )
+            }
+        }
 
     Scaffold { padding ->
         Box(
@@ -383,6 +404,24 @@ fun MobileHomeScreen(
                         onRefresh = onRefresh
                     )
                 }
+                item {
+                    ListControlsCard(
+                        selectedStatus = statusFilter,
+                        availableStatuses = availableStatuses,
+                        sortOption = sortOption,
+                        onSelectStatus = { selected ->
+                            statusFilter = if (statusFilter == selected) null else selected
+                        },
+                        onToggleSort = {
+                            sortOption = when (sortOption) {
+                                MobileOrderSortOption.UPDATED_DESC -> MobileOrderSortOption.UPDATED_ASC
+                                MobileOrderSortOption.UPDATED_ASC -> MobileOrderSortOption.TITLE_ASC
+                                MobileOrderSortOption.TITLE_ASC -> MobileOrderSortOption.STATUS_ASC
+                                MobileOrderSortOption.STATUS_ASC -> MobileOrderSortOption.UPDATED_DESC
+                            }
+                        }
+                    )
+                }
 
                 if (state.actionMessage != null) {
                     item {
@@ -416,10 +455,9 @@ fun MobileHomeScreen(
                         item {
                             DetailCard(
                                 detail = state.selectedOrderDetail,
-                                allowedTransitions =
-                                    state.selectedOrderDetail?.let { detail ->
-                                        state.allowedTransitions[detail.rawStatus].orEmpty()
-                                    }.orEmpty(),
+                                allowedTransitions = state.selectedOrderDetail?.let { detail ->
+                                    state.allowedTransitions[detail.rawStatus].orEmpty()
+                                }.orEmpty(),
                                 isSubmitting = state.isSubmitting,
                                 commentBody = commentBody,
                                 onCommentBodyChange = { commentBody = it },
@@ -428,7 +466,7 @@ fun MobileHomeScreen(
                             )
                         }
 
-                        items(state.orders) { item ->
+                        items(visibleOrders) { item ->
                             OrderCard(
                                 order = item,
                                 isSelected = state.selectedOrderId == item.id,
@@ -448,7 +486,10 @@ private fun ApiCard(apiBaseUrl: String) {
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text(
                 text = "Current API",
                 style = MaterialTheme.typography.labelMedium,
@@ -519,6 +560,55 @@ private fun CreateOrderCard(
 }
 
 @Composable
+private fun ListControlsCard(
+    selectedStatus: String?,
+    availableStatuses: List<String>,
+    sortOption: MobileOrderSortOption,
+    onSelectStatus: (String) -> Unit,
+    onToggleSort: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Queue controls",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White
+            )
+            Text(
+                text = "Sort: ${sortOptionLabel(sortOption)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFD2DAE6)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onToggleSort) {
+                    Text("Change sort")
+                }
+                if (selectedStatus != null) {
+                    Button(onClick = { onSelectStatus(selectedStatus) }) {
+                        Text("Clear filter")
+                    }
+                }
+            }
+            if (availableStatuses.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    availableStatuses.forEach { status ->
+                        Button(onClick = { onSelectStatus(status) }) {
+                            Text(statusLabel(status))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun DetailCard(
     detail: MobileOrderDetail?,
     allowedTransitions: List<String>,
@@ -551,7 +641,7 @@ private fun DetailCard(
             }
 
             Text(
-                text = "${detail.code} · ${detail.title}",
+                text = "${detail.code} - ${detail.title}",
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White
             )
@@ -608,7 +698,7 @@ private fun DetailCard(
             detail.history.takeLast(4).reversed().forEach { event ->
                 TimelineEntry(
                     title = event.summary,
-                    meta = "${event.actorName} · ${event.changedAtLabel}",
+                    meta = "${event.actorName} - ${event.changedAtLabel}",
                     body = event.reason
                 )
             }
@@ -763,5 +853,14 @@ private fun StatusMessageCard(title: String, body: String) {
 private fun statusLabel(status: String): String {
     return status.split("_").joinToString(" ") { token ->
         token.replaceFirstChar { character -> character.uppercase() }
+    }
+}
+
+private fun sortOptionLabel(option: MobileOrderSortOption): String {
+    return when (option) {
+        MobileOrderSortOption.UPDATED_DESC -> "Newest first"
+        MobileOrderSortOption.UPDATED_ASC -> "Oldest first"
+        MobileOrderSortOption.TITLE_ASC -> "Title A-Z"
+        MobileOrderSortOption.STATUS_ASC -> "Status"
     }
 }

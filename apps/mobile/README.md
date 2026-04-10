@@ -28,4 +28,4 @@ for JDK, Gradle, and Android SDK components.
 
 - default emulator API base URL: `http://10.0.2.2:8000/`
 - override at build time with `-PstatusflowApiBaseUrl=http://your-host:8000/`
-- the current mobile screen can fetch orders, create a new order, inspect live order details, post operator comments, and trigger allowed status transitions
+- the current mobile screen can fetch orders, filter and sort the queue, create a new order, inspect live order details, post operator comments, and trigger allowed status transitions
