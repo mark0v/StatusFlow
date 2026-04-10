@@ -35,6 +35,7 @@ type CreateOrderFormState = {
 };
 
 type SortField = "updated_at" | "status" | "customer_name";
+type SortDirection = "asc" | "desc";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -109,6 +110,10 @@ export default function App() {
   });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>("updated_at");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [statusFilter, setStatusFilter] = useState<OrderStatus[]>([]);
+  const [isStatusFilterOpen, setIsStatusFilterOpen] = useState(false);
+  const [openActionsOrderId, setOpenActionsOrderId] = useState<string | null>(null);
 
   async function loadDashboardData(signal?: AbortSignal) {
     const [ordersPayload, usersPayload, lifecyclePayload] = await Promise.all([
@@ -179,23 +184,61 @@ export default function App() {
     () => users.find((user) => user.role === "operator") ?? null,
     [users]
   );
+  const filteredOrders = useMemo(() => {
+    if (statusFilter.length === 0) {
+      return orders;
+    }
+
+    return orders.filter((order) => statusFilter.includes(order.status));
+  }, [orders, statusFilter]);
+
   const sortedOrders = useMemo(() => {
-    const next = [...orders];
+    const next = [...filteredOrders];
 
     next.sort((left, right) => {
       if (sortField === "status") {
-        return statusLabels[left.status].localeCompare(statusLabels[right.status]);
+        const result = statusLabels[left.status].localeCompare(statusLabels[right.status]);
+        return sortDirection === "asc" ? result : -result;
       }
 
       if (sortField === "customer_name") {
-        return left.customer_name.localeCompare(right.customer_name);
+        const result = left.customer_name.localeCompare(right.customer_name);
+        return sortDirection === "asc" ? result : -result;
       }
 
-      return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
+      const result =
+        new Date(left.updated_at).getTime() - new Date(right.updated_at).getTime();
+      return sortDirection === "asc" ? result : -result;
     });
 
     return next;
-  }, [orders, sortField]);
+  }, [filteredOrders, sortDirection, sortField]);
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortField(field);
+    setSortDirection(field === "updated_at" ? "desc" : "asc");
+  }
+
+  function toggleStatusFilter(status: OrderStatus) {
+    setStatusFilter((current) =>
+      current.includes(status)
+        ? current.filter((entry) => entry !== status)
+        : [...current, status]
+    );
+  }
+
+  function sortIndicator(field: SortField) {
+    if (sortField !== field) {
+      return "△";
+    }
+
+    return sortDirection === "asc" ? "▲" : "▼";
+  }
 
   async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -275,9 +318,8 @@ export default function App() {
         <p className="eyebrow">Operator Workspace</p>
         <h1>StatusFlow control tower</h1>
         <p className="lead">
-          Queue-first web console for live operator work. Review the active
-          queue, create new orders, and steer every order through the shared
-          lifecycle with the same backend contract used by mobile.
+          Queue-first console for fast operator work across the shared web and
+          mobile workflow.
         </p>
 
         <div className="hero-grid">
@@ -319,25 +361,16 @@ export default function App() {
         </div>
 
         <section className="table-stage">
-          <div className="table-toolbar">
-            <div>
-              <p className="eyebrow">Active queue</p>
-              <h3>Review and move orders forward</h3>
-            </div>
+            <div className="table-toolbar">
+              <div>
+                <p className="eyebrow">Active queue</p>
+                <h3>Review and move orders forward</h3>
+              </div>
 
-            <div className="toolbar-actions">
-              <label className="sort-control">
-                <span>Sort by</span>
-                <select value={sortField} onChange={(event) => setSortField(event.target.value as SortField)}>
-                  <option value="updated_at">Updated</option>
-                  <option value="status">Status</option>
-                  <option value="customer_name">Customer</option>
-                </select>
-              </label>
-
-              <button className="primary-action" onClick={() => setIsCreateOpen((current) => !current)} type="button">
-                {isCreateOpen ? "Close create form" : "Create order"}
-              </button>
+              <div className="toolbar-actions">
+                <button className="primary-action" onClick={() => setIsCreateOpen((current) => !current)} type="button">
+                  {isCreateOpen ? "Close create form" : "Create order"}
+                </button>
             </div>
           </div>
 
@@ -417,9 +450,46 @@ export default function App() {
                   <tr>
                     <th>Code</th>
                     <th>Title</th>
-                    <th>Customer</th>
-                    <th>Status</th>
-                    <th>Updated</th>
+                    <th>
+                      <button className="column-sort" onClick={() => toggleSort("customer_name")} type="button">
+                        Customer <span>{sortIndicator("customer_name")}</span>
+                      </button>
+                    </th>
+                    <th>
+                      <div className="column-filter-wrap">
+                        <button className="column-sort" onClick={() => toggleSort("status")} type="button">
+                          Status <span>{sortIndicator("status")}</span>
+                        </button>
+                        <button
+                          className={`filter-trigger ${statusFilter.length > 0 ? "active" : ""}`}
+                          onClick={() => setIsStatusFilterOpen((current) => !current)}
+                          type="button"
+                        >
+                          Filter
+                        </button>
+                        {isStatusFilterOpen ? (
+                          <div className="filter-menu">
+                            {(
+                              ["new", "in_review", "approved", "rejected", "fulfilled", "cancelled"] as OrderStatus[]
+                            ).map((status) => (
+                              <label className="filter-option" key={status}>
+                                <input
+                                  checked={statusFilter.includes(status)}
+                                  onChange={() => toggleStatusFilter(status)}
+                                  type="checkbox"
+                                />
+                                <span>{statusLabels[status]}</span>
+                              </label>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </th>
+                    <th>
+                      <button className="column-sort" onClick={() => toggleSort("updated_at")} type="button">
+                        Updated <span>{sortIndicator("updated_at")}</span>
+                      </button>
+                    </th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -443,17 +513,37 @@ export default function App() {
                             {nextStatuses.length === 0 ? (
                               <span className="transition-terminal">Terminal state</span>
                             ) : (
-                              nextStatuses.map((status) => (
+                              <div className="row-action-menu">
                                 <button
-                                  key={status}
-                                  className="transition-button"
-                                  disabled={isSubmitting}
-                                  onClick={() => handleTransition(order.id, status)}
+                                  className="transition-button transition-trigger"
+                                  onClick={() =>
+                                    setOpenActionsOrderId((current) =>
+                                      current === order.id ? null : order.id
+                                    )
+                                  }
                                   type="button"
                                 >
-                                  {statusLabels[status]}
+                                  Change status
                                 </button>
-                              ))
+                                {openActionsOrderId === order.id ? (
+                                  <div className="row-dropdown">
+                                    {nextStatuses.map((status) => (
+                                      <button
+                                        key={status}
+                                        className="dropdown-action"
+                                        disabled={isSubmitting}
+                                        onClick={() => {
+                                          setOpenActionsOrderId(null);
+                                          void handleTransition(order.id, status);
+                                        }}
+                                        type="button"
+                                      >
+                                        {statusLabels[status]}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
                             )}
                           </div>
                         </td>
