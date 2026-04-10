@@ -253,9 +253,9 @@ export default function App() {
         <p className="eyebrow">Operator Workspace</p>
         <h1>StatusFlow control tower</h1>
         <p className="lead">
-          Live operator dashboard backed by the shared workflow API. Create new
-          orders, review the current queue, and move orders through the allowed
-          status lifecycle from one place.
+          Queue-first web console for live operator work. Review the active
+          queue, create new orders, and steer every order through the shared
+          lifecycle with the same backend contract used by mobile.
         </p>
 
         <div className="hero-grid">
@@ -264,7 +264,7 @@ export default function App() {
             <strong>{isLoading ? "Loading..." : `${orders.length} tracked orders`}</strong>
           </article>
           <article className="hero-card">
-            <span>Seed actors</span>
+            <span>Shared actors</span>
             <strong>
               {users.length === 0 ? "Loading users..." : `${users.length} shared users`}
             </strong>
@@ -276,118 +276,162 @@ export default function App() {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel panel-console">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Operator Actions</p>
-            <h2>Create order and steer workflow</h2>
+            <p className="eyebrow">Queue Console</p>
+            <h2>Operate the live workflow</h2>
           </div>
           <a className="api-link" href={`${API_BASE_URL}/docs`}>
             Open API docs
           </a>
         </div>
 
-        <form className="create-form" onSubmit={handleCreateOrder}>
-          <label className="field">
-            <span>Order title</span>
-            <input
-              required
-              minLength={3}
-              value={formState.title}
-              onChange={(event) =>
-                setFormState((current) => ({ ...current, title: event.target.value }))
-              }
-              placeholder="Inspect delivery damage"
-            />
-          </label>
+        <div className="workspace-grid">
+          <aside className="action-lane">
+            <article className="lane-card lane-card-primary">
+              <p className="eyebrow">Create order</p>
+              <h3>Capture new work without leaving the queue</h3>
+              <form className="create-form" onSubmit={handleCreateOrder}>
+                <label className="field">
+                  <span>Order title</span>
+                  <input
+                    required
+                    minLength={3}
+                    value={formState.title}
+                    onChange={(event) =>
+                      setFormState((current) => ({ ...current, title: event.target.value }))
+                    }
+                    placeholder="Inspect delivery damage"
+                  />
+                </label>
 
-          <label className="field field-wide">
-            <span>Description</span>
-            <textarea
-              value={formState.description}
-              onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
-                  description: event.target.value
-                }))
-              }
-              placeholder="Add context that the operator and mobile app should both see."
-              rows={3}
-            />
-          </label>
+                <label className="field field-wide">
+                  <span>Description</span>
+                  <textarea
+                    value={formState.description}
+                    onChange={(event) =>
+                      setFormState((current) => ({
+                        ...current,
+                        description: event.target.value
+                      }))
+                    }
+                    placeholder="Add context that web and mobile operators should both see."
+                    rows={4}
+                  />
+                </label>
 
-          <button className="primary-action" disabled={isSubmitting || !customer} type="submit">
-            {isSubmitting ? "Submitting..." : "Create order"}
-          </button>
-        </form>
-
-        {actionError ? (
-          <div className="state-error compact">
-            <strong>Action failed.</strong>
-            <p>{actionError}</p>
-          </div>
-        ) : null}
-
-        <div className="status-overview">
-          {groupedStatuses.map(([status, count]) => (
-            <article className="status-card" key={status}>
-              <span>{statusLabels[status]}</span>
-              <strong>{count}</strong>
+                <button className="primary-action" disabled={isSubmitting || !customer} type="submit">
+                  {isSubmitting ? "Submitting..." : "Create order"}
+                </button>
+              </form>
             </article>
-          ))}
+
+            {actionError ? (
+              <div className="feedback-card feedback-error compact">
+                <span className="feedback-eyebrow">Action blocked</span>
+                <strong>Action failed.</strong>
+                <p>{actionError}</p>
+              </div>
+            ) : null}
+
+            <article className="lane-card">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Queue snapshot</p>
+                  <h3>Active workload at a glance</h3>
+                </div>
+              </div>
+
+              <div className="status-overview">
+                {groupedStatuses.map(([status, count]) => (
+                  <article className="status-card" key={status}>
+                    <span>{statusLabels[status]}</span>
+                    <strong>{count}</strong>
+                  </article>
+                ))}
+              </div>
+            </article>
+          </aside>
+
+          <section className="queue-stage">
+            <div className="stage-header">
+              <div>
+                <p className="eyebrow">Active queue</p>
+                <h3>Review and move orders forward</h3>
+              </div>
+              <span className="queue-count">
+                {isLoading ? "Loading..." : `${orders.length} total`}
+              </span>
+            </div>
+
+            {isLoading ? (
+              <div className="feedback-card feedback-sync">
+                <span className="feedback-eyebrow">Live sync</span>
+                <strong>Loading orders from the API</strong>
+                <p>Refreshing the queue snapshot and transition controls.</p>
+              </div>
+            ) : null}
+            {error ? (
+              <div className="feedback-card feedback-error">
+                <span className="feedback-eyebrow">Error</span>
+                <strong>Dashboard failed to load.</strong>
+                <p>{error}</p>
+              </div>
+            ) : null}
+
+            {!isLoading && !error ? (
+              <div className="orders">
+                {orders.map((order) => {
+                  const nextStatuses = lifecycle?.allowed_transitions[order.status] ?? [];
+
+                  return (
+                    <article className="order-card" key={order.id}>
+                      <div className="order-card-top">
+                        <div>
+                          <p className="order-code">{order.code}</p>
+                          <h3>{order.title}</h3>
+                        </div>
+                        <span className={`pill ${statusTone(order.status)}`}>
+                          {statusLabels[order.status]}
+                        </span>
+                      </div>
+
+                      <div className="order-meta-grid">
+                        <div className="meta-pill">
+                          <span>Customer</span>
+                          <strong>{order.customer_name}</strong>
+                        </div>
+                        <div className="meta-pill">
+                          <span>Updated</span>
+                          <strong>{formatTimestamp(order.updated_at)}</strong>
+                        </div>
+                      </div>
+
+                      <div className="transition-row">
+                        {nextStatuses.length === 0 ? (
+                          <span className="transition-terminal">Terminal state</span>
+                        ) : (
+                          nextStatuses.map((status) => (
+                            <button
+                              key={status}
+                              className="transition-button"
+                              disabled={isSubmitting}
+                              onClick={() => handleTransition(order.id, status)}
+                              type="button"
+                            >
+                              Move to {statusLabels[status]}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : null}
+          </section>
         </div>
-
-        {isLoading ? <p className="state-message">Loading orders from the API...</p> : null}
-        {error ? (
-          <div className="state-error">
-            <strong>Dashboard failed to load.</strong>
-            <p>{error}</p>
-          </div>
-        ) : null}
-
-        {!isLoading && !error ? (
-          <div className="orders">
-            {orders.map((order) => {
-              const nextStatuses = lifecycle?.allowed_transitions[order.status] ?? [];
-
-              return (
-                <article className="order-card" key={order.id}>
-                  <div>
-                    <p className="order-code">{order.code}</p>
-                    <h3>{order.title}</h3>
-                  </div>
-
-                  <p className="customer-label">Customer</p>
-                  <p className="customer-name">{order.customer_name}</p>
-
-                  <span className={`pill ${statusTone(order.status)}`}>
-                    {statusLabels[order.status]}
-                  </span>
-
-                  <div className="transition-row">
-                    {nextStatuses.length === 0 ? (
-                      <span className="transition-terminal">Terminal state</span>
-                    ) : (
-                      nextStatuses.map((status) => (
-                        <button
-                          key={status}
-                          className="transition-button"
-                          disabled={isSubmitting}
-                          onClick={() => handleTransition(order.id, status)}
-                          type="button"
-                        >
-                          Move to {statusLabels[status]}
-                        </button>
-                      ))
-                    )}
-                  </div>
-
-                  <p className="updated">Updated {formatTimestamp(order.updated_at)}</p>
-                </article>
-              );
-            })}
-          </div>
-        ) : null}
       </section>
     </main>
   );
