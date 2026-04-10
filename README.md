@@ -32,7 +32,24 @@ The main goal is to practice realistic system design and QA:
 
 ## Current stage
 
-The repository is currently an initial scaffold. The next step is to turn each app workspace into a runnable service and wire local development through Docker Compose.
+The project is now in a working MVP foundation stage.
+
+What already works:
+
+- `apps/api` serves real seeded order data from PostgreSQL
+- `apps/web` runs as a live operator console against the API
+- `apps/mobile` runs as a live Android client against the same API
+- shared order lifecycle rules are enforced by the backend
+- local Docker and emulator workflows are documented and reproducible
+- automated tests exist for API, web UI, web end-to-end, mobile smoke, and mobile Compose instrumentation
+
+What is not finished yet:
+
+- authentication and session handling
+- mobile local cache with Room and offline sync behavior
+- web comments/history operator workflow polish
+- stronger end-to-end synchronization coverage across both clients
+- production readiness concerns such as deployment, auth hardening, and observability
 
 ## Local development
 
