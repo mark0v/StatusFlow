@@ -23,3 +23,8 @@ gradlew.bat assembleDebug
 
 The current workspace uses a repository-local Android toolchain under `.local/`
 for JDK, Gradle, and Android SDK components.
+
+## API configuration
+
+- default emulator API base URL: `http://10.0.2.2:8000/`
+- override at build time with `-PstatusflowApiBaseUrl=http://your-host:8000/`
