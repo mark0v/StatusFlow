@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import statusFlowLogo from "./assets/statusflow-logo.svg";
 
 type OrderStatus =
   | "new"
@@ -336,7 +337,11 @@ export default function App() {
     <main className="shell">
       <section className="hero">
         <p className="eyebrow">Operator Workspace</p>
-        <h1>StatusFlow control tower</h1>
+        <img
+          alt="StatusFlow operator console"
+          className="hero-logo"
+          src={statusFlowLogo}
+        />
         <p className="lead">
           Queue-first console for fast operator work across the shared web and
           mobile workflow.

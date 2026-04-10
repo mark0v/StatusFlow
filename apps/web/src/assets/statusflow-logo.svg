@@ -1,0 +1,24 @@
+<svg width="340" height="88" viewBox="0 0 340 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="statusflow-ring" x1="8" y1="8" x2="80" y2="80" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5A7BFF"/>
+      <stop offset="1" stop-color="#1FCAA5"/>
+    </linearGradient>
+    <linearGradient id="statusflow-text" x1="96" y1="14" x2="278" y2="74" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F3F7FD"/>
+      <stop offset="1" stop-color="#B9D6FF"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="80" height="80" rx="26" fill="#0C1628" stroke="rgba(255,255,255,0.08)"/>
+  <circle cx="44" cy="44" r="23" stroke="url(#statusflow-ring)" stroke-width="8" opacity="0.95"/>
+  <path d="M58 31.5L44 44.5L34.5 35.5" stroke="#EAF2FF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M52 54H63" stroke="#7FD8C4" stroke-width="5" stroke-linecap="round"/>
+
+  <text x="100" y="39" fill="url(#statusflow-text)" font-family="'Segoe UI', 'Inter', sans-serif" font-size="32" font-weight="760" letter-spacing="0.02em">
+    StatusFlow
+  </text>
+  <text x="101" y="63" fill="#89A7D0" font-family="'Segoe UI', 'Inter', sans-serif" font-size="12" font-weight="600" letter-spacing="0.24em">
+    OPERATOR CONSOLE
+  </text>
+</svg>
