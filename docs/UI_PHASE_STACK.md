@@ -2,10 +2,13 @@
 
 ## Current availability
 
-- Web UI QA: Playwright MCP is available now
-- Design-source MCP: not connected yet
-- Mobile UI MCP: not connected yet
-- Android adb/emulator CLI: not available on PATH in this environment
+- Web UI QA: Playwright MCP is configured at project level
+- Design-source MCP: Figma MCP and Canva MCP are configured at project level
+- Canva Dev MCP: configured at project level for Canva platform/dev docs
+- Mobile UI MCP: mobile-mcp is configured at project level
+- Android adb/emulator CLI: local `adb.exe` exists under `.local/android-sdk/platform-tools`
+- Android emulator binary is not installed in the local SDK yet
+- `adb-mcp` is intentionally not enabled because of a published critical command-injection advisory on the public package
 
 ## Recommended stack
 
@@ -15,6 +18,9 @@
 - Canva MCP as optional ideation layer
 - Penpot MCP as optional open-source fallback
 
+Auth note:
+- Figma MCP and Canva MCP are remote servers and will require per-user authentication in the Codex client after refresh/restart.
+
 ### Web UI
 
 - Playwright MCP for UI verification, screenshots, responsive checks, and regression QA
@@ -22,7 +28,10 @@
 ### Mobile UI
 
 - mobile-mcp as primary mobile interaction layer
-- adb-mcp as Android-focused fallback for screenshots, hierarchy, install, and logs
+- local repo-scoped Android platform tools as the current Android fallback
+
+Note:
+- `adb-mcp` is excluded for now due to a public GitHub security advisory (`GHSA-54j7-grvr-9xwg`) against the public package.
 
 ## Phase plan
 
@@ -58,6 +67,5 @@ Deliverables:
 
 ## Execution note
 
-Until Phase 1 and Phase 3 MCPs are connected, we can still prepare design direction
-and continue code-side mobile/web UI structure, but visual sign-off for mobile should
-wait for a real mobile UI inspection loop.
+After adding or changing `.codex/config.toml`, the Codex client may need a restart or MCP
+refresh before the new servers appear in the active tool list.

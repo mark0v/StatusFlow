@@ -1,0 +1,24 @@
+[mcp_servers.playwright]
+command = "npx"
+args = ["@playwright/mcp@latest"]
+
+[mcp_servers.figma]
+url = "https://mcp.figma.com/mcp"
+
+[mcp_servers.canva]
+url = "https://mcp.canva.com/mcp"
+
+[mcp_servers.canva_dev]
+command = "npx"
+args = ["-y", "@canva/cli@latest", "mcp"]
+startup_timeout_sec = 60
+
+[mcp_servers.mobile_mcp]
+command = "npx"
+args = ["-y", "@mobilenext/mobile-mcp@latest"]
+startup_timeout_sec = 60
+
+[mcp_servers.mobile_mcp.env]
+MOBILEMCP_DISABLE_TELEMETRY = "1"
+ANDROID_SDK_ROOT = "C:\\Users\\nuc\\source\\repos\\StatusFlow\\.local\\android-sdk"
+ADB_PATH = "C:\\Users\\nuc\\source\\repos\\StatusFlow\\.local\\android-sdk\\platform-tools\\adb.exe"
