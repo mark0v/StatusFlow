@@ -30,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -271,9 +272,10 @@ fun MobileHomeScreen(
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var commentBody by remember { mutableStateOf("") }
-    var searchQuery by remember { mutableStateOf("") }
-    var statusFilter by remember { mutableStateOf<String?>(null) }
-    var sortOption by remember { mutableStateOf(MobileOrderSortOption.UPDATED_DESC) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var sortOptionName by rememberSaveable { mutableStateOf(MobileOrderSortOption.UPDATED_DESC.name) }
+    val sortOption = MobileOrderSortOption.valueOf(sortOptionName)
 
     val availableStatuses = state.orders.map { it.rawStatus }.distinct()
     val normalizedQuery = searchQuery.trim().lowercase()
@@ -329,12 +331,12 @@ fun MobileHomeScreen(
                             onSearchQueryChange = { searchQuery = it },
                             onSelectStatus = { selected -> statusFilter = if (statusFilter == selected) null else selected },
                             onToggleSort = {
-                                sortOption = when (sortOption) {
+                                sortOptionName = when (sortOption) {
                                     MobileOrderSortOption.UPDATED_DESC -> MobileOrderSortOption.UPDATED_ASC
                                     MobileOrderSortOption.UPDATED_ASC -> MobileOrderSortOption.TITLE_ASC
                                     MobileOrderSortOption.TITLE_ASC -> MobileOrderSortOption.STATUS_ASC
                                     MobileOrderSortOption.STATUS_ASC -> MobileOrderSortOption.UPDATED_DESC
-                                }
+                                }.name
                             }
                         )
                     }
