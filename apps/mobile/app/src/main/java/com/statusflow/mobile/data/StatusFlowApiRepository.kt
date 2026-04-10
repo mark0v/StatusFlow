@@ -104,6 +104,16 @@ class StatusFlowApiRepository(
         )
     }
 
+    suspend fun addComment(orderId: String, authorId: String, body: String) {
+        apiService.addComment(
+            orderId = orderId,
+            payload = AddCommentRequest(
+                author_id = authorId,
+                body = body
+            )
+        )
+    }
+
     private fun mapOrder(response: OrderApiResponse): MobileOrderSummary {
         return MobileOrderSummary(
             id = response.id,

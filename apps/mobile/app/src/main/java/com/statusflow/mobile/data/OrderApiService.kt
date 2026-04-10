@@ -83,6 +83,11 @@ data class TransitionOrderStatusRequest(
     val reason: String
 )
 
+data class AddCommentRequest(
+    val author_id: String,
+    val body: String
+)
+
 interface OrderApiService {
     @GET("orders")
     suspend fun listOrders(): List<OrderApiResponse>
@@ -98,6 +103,12 @@ interface OrderApiService {
 
     @POST("orders")
     suspend fun createOrder(@Body payload: CreateOrderRequest): OrderDetailApiResponse
+
+    @POST("orders/{orderId}/comments")
+    suspend fun addComment(
+        @Path("orderId") orderId: String,
+        @Body payload: AddCommentRequest
+    ): OrderDetailApiResponse
 
     @POST("orders/{orderId}/status-transitions")
     suspend fun transitionOrderStatus(

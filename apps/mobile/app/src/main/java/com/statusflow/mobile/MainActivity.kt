@@ -244,6 +244,59 @@ class MobileHomeViewModel(
             }
         }
     }
+
+    fun addComment(body: String) {
+        val state = uiState.value
+        val selectedOrderId = state.selectedOrderId
+        val operator = state.users.firstOrNull { user -> user.role == "operator" }
+
+        if (selectedOrderId == null) {
+            _uiState.value = state.copy(actionMessage = "Pick an order before adding a comment.")
+            return
+        }
+
+        if (operator == null) {
+            _uiState.value = state.copy(actionMessage = "Operator seed user is missing.")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = state.copy(
+                isSubmitting = true,
+                actionMessage = null,
+                errorMessage = null
+            )
+
+            runCatching {
+                repository.addComment(
+                    orderId = selectedOrderId,
+                    authorId = operator.id,
+                    body = body
+                )
+                val dashboard = repository.fetchDashboardData()
+                val detail = repository.fetchOrderDetail(selectedOrderId)
+
+                dashboard to detail
+            }.onSuccess { (dashboard, detail) ->
+                _uiState.value = MobileHomeUiState(
+                    isLoading = false,
+                    isSubmitting = false,
+                    apiBaseUrl = BuildConfig.API_BASE_URL,
+                    orders = dashboard.orders,
+                    users = dashboard.users,
+                    allowedTransitions = dashboard.allowedTransitions,
+                    selectedOrderId = selectedOrderId,
+                    selectedOrderDetail = detail,
+                    actionMessage = "Comment added successfully."
+                )
+            }.onFailure { throwable ->
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    actionMessage = throwable.message ?: "Comment submission failed."
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -260,7 +313,8 @@ fun MobileHomeRoute() {
         onRefresh = viewModel::refresh,
         onCreateOrder = viewModel::createOrder,
         onSelectOrder = viewModel::selectOrder,
-        onTransitionOrder = viewModel::transitionOrder
+        onTransitionOrder = viewModel::transitionOrder,
+        onAddComment = viewModel::addComment
     )
 }
 
@@ -270,10 +324,12 @@ fun MobileHomeScreen(
     onRefresh: () -> Unit,
     onCreateOrder: (String, String) -> Unit,
     onSelectOrder: (String) -> Unit,
-    onTransitionOrder: (String) -> Unit
+    onTransitionOrder: (String) -> Unit,
+    onAddComment: (String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    var commentBody by remember { mutableStateOf("") }
 
     Scaffold { padding ->
         Box(
@@ -365,7 +421,10 @@ fun MobileHomeScreen(
                                         state.allowedTransitions[detail.rawStatus].orEmpty()
                                     }.orEmpty(),
                                 isSubmitting = state.isSubmitting,
-                                onTransitionOrder = onTransitionOrder
+                                commentBody = commentBody,
+                                onCommentBodyChange = { commentBody = it },
+                                onTransitionOrder = onTransitionOrder,
+                                onAddComment = { onAddComment(commentBody.trim()) }
                             )
                         }
 
@@ -464,7 +523,10 @@ private fun DetailCard(
     detail: MobileOrderDetail?,
     allowedTransitions: List<String>,
     isSubmitting: Boolean,
-    onTransitionOrder: (String) -> Unit
+    commentBody: String,
+    onCommentBodyChange: (String) -> Unit,
+    onTransitionOrder: (String) -> Unit,
+    onAddComment: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -556,6 +618,21 @@ private fun DetailCard(
                 style = MaterialTheme.typography.titleSmall,
                 color = Color.White
             )
+            OutlinedTextField(
+                value = commentBody,
+                onValueChange = onCommentBodyChange,
+                label = { Text("Add operator note") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
+                    onClick = onAddComment
+                ) {
+                    Text(if (isSubmitting) "Sending..." else "Post comment")
+                }
+            }
             if (detail.comments.isEmpty()) {
                 Text(
                     text = "No comments yet.",
