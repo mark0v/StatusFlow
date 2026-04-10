@@ -19,6 +19,8 @@ build/
 .expo/
 .turbo/
 coverage/
+playwright-report/
+test-results/
 outputs/
 
 .idea/
