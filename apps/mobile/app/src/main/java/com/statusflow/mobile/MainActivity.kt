@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -336,7 +337,8 @@ fun MobileHomeScreen(
                         QueueOverviewCard(
                             totalOrders = state.orders.size,
                             visibleOrders = visibleOrders.size,
-                            selectedOrderCode = state.selectedOrderDetail?.code
+                            selectedOrderCode = state.selectedOrderDetail?.code,
+                            activeFilterLabel = statusFilter?.let(::statusLabel)
                         )
                     }
                     item {
@@ -483,7 +485,12 @@ private fun ApiCard(apiBaseUrl: String) {
 }
 
 @Composable
-private fun QueueOverviewCard(totalOrders: Int, visibleOrders: Int, selectedOrderCode: String?) {
+private fun QueueOverviewCard(
+    totalOrders: Int,
+    visibleOrders: Int,
+    selectedOrderCode: String?,
+    activeFilterLabel: String?
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Navy500),
@@ -498,7 +505,7 @@ private fun QueueOverviewCard(totalOrders: Int, visibleOrders: Int, selectedOrde
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Queue snapshot", style = MaterialTheme.typography.labelLarge, color = Mint400, fontWeight = FontWeight.SemiBold)
-                Text("Keep the active workload visible before diving into details.", style = MaterialTheme.typography.bodyMedium, color = Slate100)
+                Text("Active workload first.", style = MaterialTheme.typography.bodyMedium, color = Slate100)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 MetricTile(
@@ -514,14 +521,17 @@ private fun QueueOverviewCard(totalOrders: Int, visibleOrders: Int, selectedOrde
                     modifier = Modifier.weight(1f)
                 )
             }
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.9f)),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Focus order", style = MaterialTheme.typography.labelMedium, color = Slate300)
-                    Text(selectedOrderCode ?: "No order selected", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                CompactInfoCard(
+                    title = "Focus",
+                    value = selectedOrderCode ?: "None",
+                    modifier = Modifier.weight(1f)
+                )
+                CompactInfoCard(
+                    title = "Filter",
+                    value = activeFilterLabel ?: "All",
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -609,7 +619,7 @@ private fun ListControlsCard(
     onToggleSort: () -> Unit
 ) {
     ShellCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionLabel(title = "Queue controls", subtitle = "Slice the queue fast when volume rises.")
             OutlinedTextField(
                 value = searchQuery,
@@ -618,13 +628,13 @@ private fun ListControlsCard(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Sort", style = MaterialTheme.typography.labelMedium, color = Slate300)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Sort", style = MaterialTheme.typography.labelSmall, color = Slate300)
                 Text(sortOptionLabel(sortOption), style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 PillButton(
-                    label = "Cycle sort",
+                    label = "Sort",
                     onClick = onToggleSort,
                     accent = Blue400,
                     modifier = Modifier.weight(1f)
@@ -640,20 +650,21 @@ private fun ListControlsCard(
             }
             if (availableStatuses.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Status filter", style = MaterialTheme.typography.labelMedium, color = Slate300)
-                    availableStatuses.forEach { status ->
-                        val active = selectedStatus == status
-                        Button(
-                            onClick = { onSelectStatus(status) },
-                            shape = RoundedCornerShape(18.dp),
-                            border = BorderStroke(1.dp, if (active) Blue300 else Slate300.copy(alpha = 0.3f)),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (active) Blue400.copy(alpha = 0.22f) else Navy700,
-                                contentColor = if (active) Color.White else Slate100
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(statusLabel(status), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("Status filter", style = MaterialTheme.typography.labelSmall, color = Slate300)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 4.dp)) {
+                        items(availableStatuses) { status ->
+                            val active = selectedStatus == status
+                            Button(
+                                onClick = { onSelectStatus(status) },
+                                shape = RoundedCornerShape(18.dp),
+                                border = BorderStroke(1.dp, if (active) Blue300 else Slate300.copy(alpha = 0.26f)),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (active) Blue400.copy(alpha = 0.22f) else Navy700,
+                                    contentColor = if (active) Color.White else Slate100
+                                )
+                            ) {
+                                Text(statusLabel(status), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }
@@ -858,6 +869,20 @@ private fun MetricTile(label: String, value: String, accent: Color, modifier: Mo
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.labelMedium, color = Slate300)
             Text(value, style = MaterialTheme.typography.headlineSmall, color = accent, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun CompactInfoCard(title: String, value: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.82f)),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.labelSmall, color = Slate300)
+            Text(value, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
