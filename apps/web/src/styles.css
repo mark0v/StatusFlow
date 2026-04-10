@@ -121,6 +121,31 @@ a {
   color: #d7e4ff;
 }
 
+.status-overview {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.status-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 8px;
+}
+
+.status-card span {
+  color: #8ea6c4;
+  font-size: 0.85rem;
+}
+
+.status-card strong {
+  font-size: 1.45rem;
+}
+
 .orders {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -154,14 +179,29 @@ a {
   color: #9fc0ff;
 }
 
-.tone-progress {
+.tone-review {
   background: rgba(255, 194, 59, 0.18);
   color: #ffd574;
 }
 
-.tone-ready {
+.tone-approved {
   background: rgba(38, 201, 145, 0.18);
   color: #83f2c8;
+}
+
+.tone-rejected {
+  background: rgba(255, 111, 111, 0.16);
+  color: #ff9d9d;
+}
+
+.tone-fulfilled {
+  background: rgba(124, 255, 210, 0.16);
+  color: #9efadb;
+}
+
+.tone-cancelled {
+  background: rgba(173, 184, 199, 0.18);
+  color: #d4dde8;
 }
 
 .tone-default {
@@ -169,12 +209,44 @@ a {
   color: #ffffff;
 }
 
+.customer-label,
 .updated {
   margin: 0;
   color: #8ea6c4;
 }
 
+.customer-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.customer-name {
+  margin: -6px 0 0;
+  font-size: 1rem;
+}
+
+.state-message,
+.state-error {
+  margin: 0 0 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.state-error strong,
+.state-error p {
+  margin: 0;
+}
+
+.state-error p {
+  margin-top: 6px;
+  color: #ffb0b0;
+}
+
 @media (max-width: 900px) {
+  .status-overview,
   .hero-grid,
   .orders {
     grid-template-columns: 1fr;
