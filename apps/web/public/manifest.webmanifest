@@ -1,0 +1,17 @@
+{
+  "name": "StatusFlow Operator Console",
+  "short_name": "StatusFlow",
+  "description": "Queue-first console for reviewing orders, changing statuses, and managing the live StatusFlow workflow.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09111f",
+  "theme_color": "#09111f",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
