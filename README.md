@@ -38,3 +38,4 @@ The repository is currently an initial scaffold. The next step is to turn each a
 
 - `docker compose up --build api web postgres` runs the backend stack
 - `apps/mobile/` contains the Android/Jetpack Compose starter project and runs separately in Android Studio
+- `docs/LOCAL_DEV_LOOP.md` describes the current end-to-end local workflow

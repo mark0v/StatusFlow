@@ -7,6 +7,7 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       DATABASE_URL: postgresql+psycopg://statusflow:statusflow@postgres:5432/statusflow
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
     depends_on:
       - postgres
 
