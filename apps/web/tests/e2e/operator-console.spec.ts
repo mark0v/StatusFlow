@@ -3,6 +3,20 @@ import { expect, test } from "@playwright/test";
 const uniqueSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 test.describe("StatusFlow operator console", () => {
+  test("exposes browser branding metadata", async ({ page }) => {
+    await page.goto("/");
+
+    await expect(page).toHaveTitle("StatusFlow Operator Console");
+
+    const faviconHref = await page.locator('link[rel="icon"]').getAttribute("href");
+    const manifestHref = await page.locator('link[rel="manifest"]').getAttribute("href");
+    const themeColor = await page.locator('meta[name="theme-color"]').getAttribute("content");
+
+    expect(faviconHref).toBe("/favicon.svg");
+    expect(manifestHref).toBe("/manifest.webmanifest");
+    expect(themeColor).toBe("#09111f");
+  });
+
   test("renders static status summary cards", async ({ page }) => {
     await page.goto("/");
 
@@ -44,5 +58,18 @@ test.describe("StatusFlow operator console", () => {
     await page.getByRole("button", { name: "In review" }).click();
 
     await expect(createdRow).toContainText("In review");
+  });
+
+  test("closes row status actions when clicking outside", async ({ page }) => {
+    await page.goto("/");
+
+    const firstRow = page.locator("tbody tr").first();
+    await firstRow.getByRole("button", { name: "Change status" }).click();
+
+    const actionMenu = page.locator(".row-dropdown").first();
+    await expect(actionMenu).toBeVisible();
+
+    await page.mouse.click(20, 20);
+    await expect(actionMenu).toBeHidden();
   });
 });
