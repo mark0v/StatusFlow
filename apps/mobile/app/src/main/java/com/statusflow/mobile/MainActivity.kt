@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -529,23 +530,46 @@ private fun ScreenTitle() {
 @Composable
 private fun ApiCard(apiBaseUrl: String) {
     ShellCard {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
-                Text("Connected backend", style = MaterialTheme.typography.labelMedium, color = Blue300)
-                Text(apiBaseUrl, style = MaterialTheme.typography.bodyMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        BoxWithConstraints {
+            val isCompact = maxWidth < 360.dp
+            if (isCompact) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Connected backend", style = MaterialTheme.typography.labelMedium, color = Blue300)
+                        Text(apiBaseUrl, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    }
+                    Text(
+                        "Live",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Mint400,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                        Text("Connected backend", style = MaterialTheme.typography.labelMedium, color = Blue300)
+                        Text(apiBaseUrl, style = MaterialTheme.typography.bodyMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Text(
+                        "Live",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Mint400,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
-            Text(
-                "Live",
-                style = MaterialTheme.typography.labelMedium,
-                color = Mint400,
-                fontWeight = FontWeight.SemiBold
-            )
         }
     }
 }
@@ -563,41 +587,71 @@ private fun QueueOverviewCard(
         shape = RoundedCornerShape(28.dp),
         border = BorderStroke(1.dp, Blue300.copy(alpha = 0.3f))
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Queue snapshot", style = MaterialTheme.typography.labelLarge, color = Mint400, fontWeight = FontWeight.SemiBold)
-                Text("Active workload first.", style = MaterialTheme.typography.bodyMedium, color = Slate100)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                MetricTile(
-                    label = "Total",
-                    value = totalOrders.toString(),
-                    accent = Blue400,
-                    modifier = Modifier.weight(1f)
-                )
-                MetricTile(
-                    label = "Visible",
-                    value = visibleOrders.toString(),
-                    accent = Mint400,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                CompactInfoCard(
-                    title = "Focus",
-                    value = selectedOrderCode ?: "None",
-                    modifier = Modifier.weight(1f)
-                )
-                CompactInfoCard(
-                    title = "Filter",
-                    value = activeFilterLabel ?: "All",
-                    modifier = Modifier.weight(1f)
-                )
+        BoxWithConstraints {
+            val isCompact = maxWidth < 360.dp
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Queue snapshot", style = MaterialTheme.typography.labelLarge, color = Mint400, fontWeight = FontWeight.SemiBold)
+                    Text("Active workload first.", style = MaterialTheme.typography.bodyMedium, color = Slate100)
+                }
+                if (isCompact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        MetricTile(
+                            label = "Total",
+                            value = totalOrders.toString(),
+                            accent = Blue400,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        MetricTile(
+                            label = "Visible",
+                            value = visibleOrders.toString(),
+                            accent = Mint400,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        CompactInfoCard(
+                            title = "Focus",
+                            value = selectedOrderCode ?: "None",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        CompactInfoCard(
+                            title = "Filter",
+                            value = activeFilterLabel ?: "All",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        MetricTile(
+                            label = "Total",
+                            value = totalOrders.toString(),
+                            accent = Blue400,
+                            modifier = Modifier.weight(1f)
+                        )
+                        MetricTile(
+                            label = "Visible",
+                            value = visibleOrders.toString(),
+                            accent = Mint400,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        CompactInfoCard(
+                            title = "Focus",
+                            value = selectedOrderCode ?: "None",
+                            modifier = Modifier.weight(1f)
+                        )
+                        CompactInfoCard(
+                            title = "Filter",
+                            value = activeFilterLabel ?: "All",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
         }
     }
@@ -617,73 +671,158 @@ private fun CreateOrderCard(
     onToggleExpanded: () -> Unit
 ) {
     ShellCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
-                    Text("Create order", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (isExpanded) "Capture new work without leaving the queue."
-                        else "Open a compact composer when you need to add work.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Slate300
-                    )
-                }
-                Button(
-                    enabled = !isSubmitting,
-                    onClick = onToggleExpanded,
-                    modifier = Modifier.semantics {
-                        stateDescription = if (isExpanded) "Composer expanded" else "Composer collapsed"
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isExpanded) Navy700 else Blue400,
-                        contentColor = if (isExpanded) Slate100 else Navy900,
-                        disabledContainerColor = Navy600,
-                        disabledContentColor = Slate300
-                    )
-                ) {
-                    Text(if (isExpanded) "Collapse" else "New order")
-                }
-            }
-
-            if (isExpanded) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = onTitleChange,
-                    label = { Text("Order title") },
-                    modifier = Modifier.fillMaxWidth().semantics {
-                        contentDescription = "Order title"
-                    },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = onDescriptionChange,
-                    label = { Text("Operator brief") },
-                    modifier = Modifier.fillMaxWidth().semantics {
-                        contentDescription = "Operator brief"
-                    },
-                    minLines = 3
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(
-                        enabled = !isSubmitting && title.length >= 3,
-                        onClick = onCreate,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Blue400,
-                            contentColor = Navy900,
-                            disabledContainerColor = Navy600,
-                            disabledContentColor = Slate300
-                        ),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (isSubmitting) "Submitting..." else "Create")
+        BoxWithConstraints {
+            val isCompact = maxWidth < 360.dp
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (isCompact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Create order", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (isExpanded) "Capture new work without leaving the queue."
+                                else "Open a compact composer when you need to add work.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Slate300
+                            )
+                        }
+                        Button(
+                            enabled = !isSubmitting,
+                            onClick = onToggleExpanded,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics {
+                                    stateDescription = if (isExpanded) "Composer expanded" else "Composer collapsed"
+                                },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isExpanded) Navy700 else Blue400,
+                                contentColor = if (isExpanded) Slate100 else Navy900,
+                                disabledContainerColor = Navy600,
+                                disabledContentColor = Slate300
+                            )
+                        ) {
+                            Text(if (isExpanded) "Collapse" else "New order")
+                        }
                     }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                            Text("Create order", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (isExpanded) "Capture new work without leaving the queue."
+                                else "Open a compact composer when you need to add work.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Slate300
+                            )
+                        }
+                        Button(
+                            enabled = !isSubmitting,
+                            onClick = onToggleExpanded,
+                            modifier = Modifier.semantics {
+                                stateDescription = if (isExpanded) "Composer expanded" else "Composer collapsed"
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isExpanded) Navy700 else Blue400,
+                                contentColor = if (isExpanded) Slate100 else Navy900,
+                                disabledContainerColor = Navy600,
+                                disabledContentColor = Slate300
+                            )
+                        ) {
+                            Text(if (isExpanded) "Collapse" else "New order")
+                        }
+                    }
+                }
+
+                if (isExpanded) {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = onTitleChange,
+                        label = { Text("Order title") },
+                        modifier = Modifier.fillMaxWidth().semantics {
+                            contentDescription = "Order title"
+                        },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = onDescriptionChange,
+                        label = { Text("Operator brief") },
+                        modifier = Modifier.fillMaxWidth().semantics {
+                            contentDescription = "Operator brief"
+                        },
+                        minLines = 3
+                    )
+                    if (isCompact) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(
+                                enabled = !isSubmitting && title.length >= 3,
+                                onClick = onCreate,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Blue400,
+                                    contentColor = Navy900,
+                                    disabledContainerColor = Navy600,
+                                    disabledContentColor = Slate300
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (isSubmitting) "Submitting..." else "Create")
+                            }
+                            Button(
+                                enabled = !isLoading && !isSubmitting,
+                                onClick = onRefresh,
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, Slate300.copy(alpha = 0.5f)),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Navy700,
+                                    contentColor = Slate100,
+                                    disabledContainerColor = Navy600,
+                                    disabledContentColor = Slate300
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Refresh")
+                            }
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(
+                                enabled = !isSubmitting && title.length >= 3,
+                                onClick = onCreate,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Blue400,
+                                    contentColor = Navy900,
+                                    disabledContainerColor = Navy600,
+                                    disabledContentColor = Slate300
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(if (isSubmitting) "Submitting..." else "Create")
+                            }
+                            Button(
+                                enabled = !isLoading && !isSubmitting,
+                                onClick = onRefresh,
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, Slate300.copy(alpha = 0.5f)),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Navy700,
+                                    contentColor = Slate100,
+                                    disabledContainerColor = Navy600,
+                                    disabledContentColor = Slate300
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Refresh")
+                            }
+                        }
+                    }
+                } else {
                     Button(
                         enabled = !isLoading && !isSubmitting,
                         onClick = onRefresh,
@@ -695,26 +834,10 @@ private fun CreateOrderCard(
                             disabledContainerColor = Navy600,
                             disabledContentColor = Slate300
                         ),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Refresh")
                     }
-                }
-            } else {
-                Button(
-                    enabled = !isLoading && !isSubmitting,
-                    onClick = onRefresh,
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, Slate300.copy(alpha = 0.5f)),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Navy700,
-                        contentColor = Slate100,
-                        disabledContainerColor = Navy600,
-                        disabledContentColor = Slate300
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Refresh")
                 }
             }
         }
@@ -746,56 +869,85 @@ private fun ListControlsCard(
     onToggleSort: () -> Unit
 ) {
     ShellCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionLabel(title = "Queue controls", subtitle = "Slice the queue fast when volume rises.")
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearchQueryChange,
-                label = { Text("Search code, title, or customer") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Sort", style = MaterialTheme.typography.labelSmall, color = Slate300)
-                Text(sortOptionLabel(sortOption), style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                PillButton(
-                    label = "Sort",
-                    onClick = onToggleSort,
-                    accent = Blue400,
-                    stateDescription = sortOptionLabel(sortOption),
-                    modifier = Modifier.weight(1f)
+        BoxWithConstraints {
+            val isCompact = maxWidth < 360.dp
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionLabel(title = "Queue controls", subtitle = "Slice the queue fast when volume rises.")
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    label = { Text("Search code, title, or customer") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
-                if (selectedStatus != null) {
-                    PillButton(
-                        label = "Clear filter",
-                        onClick = { onSelectStatus(selectedStatus) },
-                        accent = Slate200,
-                        stateDescription = "Status filter active",
-                        modifier = Modifier.weight(1f)
-                    )
+                if (isCompact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Sort", style = MaterialTheme.typography.labelSmall, color = Slate300)
+                        Text(sortOptionLabel(sortOption), style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Sort", style = MaterialTheme.typography.labelSmall, color = Slate300)
+                        Text(sortOptionLabel(sortOption), style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    }
                 }
-            }
-            if (availableStatuses.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Status filter", style = MaterialTheme.typography.labelSmall, color = Slate300)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 4.dp)) {
-                        items(availableStatuses) { status ->
-                            val active = selectedStatus == status
-                            Button(
-                                onClick = { onSelectStatus(status) },
-                                modifier = Modifier.semantics {
-                                    stateDescription = if (active) "Selected" else "Not selected"
-                                },
-                                shape = RoundedCornerShape(18.dp),
-                                border = BorderStroke(1.dp, if (active) Blue300 else Slate300.copy(alpha = 0.26f)),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (active) Blue400.copy(alpha = 0.22f) else Navy700,
-                                    contentColor = if (active) Color.White else Slate100
-                                )
-                            ) {
-                                Text(statusLabel(status), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (selectedStatus != null && isCompact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        PillButton(
+                            label = "Sort",
+                            onClick = onToggleSort,
+                            accent = Blue400,
+                            stateDescription = sortOptionLabel(sortOption),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        PillButton(
+                            label = "Clear filter",
+                            onClick = { onSelectStatus(selectedStatus) },
+                            accent = Slate200,
+                            stateDescription = "Status filter active",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        PillButton(
+                            label = "Sort",
+                            onClick = onToggleSort,
+                            accent = Blue400,
+                            stateDescription = sortOptionLabel(sortOption),
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (selectedStatus != null) {
+                            PillButton(
+                                label = "Clear filter",
+                                onClick = { onSelectStatus(selectedStatus) },
+                                accent = Slate200,
+                                stateDescription = "Status filter active",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+                if (availableStatuses.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Status filter", style = MaterialTheme.typography.labelSmall, color = Slate300)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 4.dp)) {
+                            items(availableStatuses) { status ->
+                                val active = selectedStatus == status
+                                Button(
+                                    onClick = { onSelectStatus(status) },
+                                    modifier = Modifier.semantics {
+                                        stateDescription = if (active) "Selected" else "Not selected"
+                                    },
+                                    shape = RoundedCornerShape(18.dp),
+                                    border = BorderStroke(1.dp, if (active) Blue300 else Slate300.copy(alpha = 0.26f)),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (active) Blue400.copy(alpha = 0.22f) else Navy700,
+                                        contentColor = if (active) Color.White else Slate100
+                                    )
+                                ) {
+                                    Text(statusLabel(status), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
                         }
                     }
@@ -817,113 +969,135 @@ private fun DetailScreenCard(
     onAddComment: () -> Unit,
     onBack: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Navy500),
-            shape = RoundedCornerShape(28.dp),
-            border = BorderStroke(1.dp, Blue300.copy(alpha = 0.28f))
-        ) {
-            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = onBack,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100)
-                ) {
-                    Text("Back to queue")
+    BoxWithConstraints {
+        val isCompact = maxWidth < 360.dp
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Navy500),
+                shape = RoundedCornerShape(28.dp),
+                border = BorderStroke(1.dp, Blue300.copy(alpha = 0.28f))
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = onBack,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100)
+                    ) {
+                        Text("Back to queue")
+                    }
+                    Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                    Text(detail.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                    if (isCompact) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
+                            Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            CompactInfoCard(
+                                title = "Customer",
+                                value = detail.customerName,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            CompactInfoCard(
+                                title = "Comments",
+                                value = detail.comments.size.toString(),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
+                            Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            CompactInfoCard(
+                                title = "Customer",
+                                value = detail.customerName,
+                                modifier = Modifier.weight(1f)
+                            )
+                            CompactInfoCard(
+                                title = "Comments",
+                                value = detail.comments.size.toString(),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                    Text(detail.description, style = MaterialTheme.typography.bodyLarge, color = Color.White)
                 }
-                Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
-                Text(detail.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
-                    Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    CompactInfoCard(
-                        title = "Customer",
-                        value = detail.customerName,
-                        modifier = Modifier.weight(1f)
-                    )
-                    CompactInfoCard(
-                        title = "Comments",
-                        value = detail.comments.size.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Text(detail.description, style = MaterialTheme.typography.bodyLarge, color = Color.White)
             }
-        }
 
-        if (actionMessage != null) {
-            FeedbackCard(
-                title = "Latest action",
-                body = actionMessage,
-                accent = Mint400,
-                surface = Navy700,
-                eyebrow = "ACTION"
-            )
-        }
+            if (actionMessage != null) {
+                FeedbackCard(
+                    title = "Latest action",
+                    body = actionMessage,
+                    accent = Mint400,
+                    surface = Navy700,
+                    eyebrow = "ACTION"
+                )
+            }
 
-        DetailSectionCard(title = "Next steps", subtitle = "Move the order through the allowed lifecycle only.") {
-            if (allowedTransitions.isEmpty()) {
-                Text("This order is already in a terminal state.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    allowedTransitions.forEach { status ->
-                        Button(
-                            enabled = !isSubmitting,
-                            onClick = { onTransitionOrder(status) },
-                            shape = RoundedCornerShape(18.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Blue400,
-                                contentColor = Navy900,
-                                disabledContainerColor = Navy600,
-                                disabledContentColor = Slate300
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(statusLabel(status))
+            DetailSectionCard(title = "Next steps", subtitle = "Move the order through the allowed lifecycle only.") {
+                if (allowedTransitions.isEmpty()) {
+                    Text("This order is already in a terminal state.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        allowedTransitions.forEach { status ->
+                            Button(
+                                enabled = !isSubmitting,
+                                onClick = { onTransitionOrder(status) },
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Blue400,
+                                    contentColor = Navy900,
+                                    disabledContainerColor = Navy600,
+                                    disabledContentColor = Slate300
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(statusLabel(status))
+                            }
                         }
                     }
                 }
             }
-        }
 
-        DetailSectionCard(title = "History", subtitle = "Most recent workflow events.") {
-            detail.history.takeLast(4).reversed().forEach { event ->
-                TimelineEntry(event.summary, "${event.actorName} | ${event.changedAtLabel}", event.reason)
+            DetailSectionCard(title = "History", subtitle = "Most recent workflow events.") {
+                detail.history.takeLast(4).reversed().forEach { event ->
+                    TimelineEntry(event.summary, "${event.actorName} | ${event.changedAtLabel}", event.reason)
+                }
             }
-        }
 
-        DetailSectionCard(title = "Comments", subtitle = "Leave a note for the next operator.") {
-            Button(
-                enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
-                onClick = onAddComment,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Mint400,
-                    contentColor = Navy900,
-                    disabledContainerColor = Navy600,
-                    disabledContentColor = Slate300
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (isSubmitting) "Sending..." else "Post comment")
-            }
-            OutlinedTextField(
-                value = commentBody,
-                onValueChange = onCommentBodyChange,
-                label = { Text("Add operator note") },
-                modifier = Modifier.fillMaxWidth().semantics {
-                    contentDescription = "Add operator note"
-                },
-                minLines = 2
-            )
-            if (detail.comments.isEmpty()) {
-                Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
-            } else {
-                detail.comments.reversed().forEach { comment ->
-                    TimelineEntry(comment.authorName, comment.createdAtLabel, comment.body)
+            DetailSectionCard(title = "Comments", subtitle = "Leave a note for the next operator.") {
+                Button(
+                    enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
+                    onClick = onAddComment,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Mint400,
+                        contentColor = Navy900,
+                        disabledContainerColor = Navy600,
+                        disabledContentColor = Slate300
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (isSubmitting) "Sending..." else "Post comment")
+                }
+                OutlinedTextField(
+                    value = commentBody,
+                    onValueChange = onCommentBodyChange,
+                    label = { Text("Add operator note") },
+                    modifier = Modifier.fillMaxWidth().semantics {
+                        contentDescription = "Add operator note"
+                    },
+                    minLines = 2
+                )
+                if (detail.comments.isEmpty()) {
+                    Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
+                } else {
+                    detail.comments.reversed().forEach { comment ->
+                        TimelineEntry(comment.authorName, comment.createdAtLabel, comment.body)
+                    }
                 }
             }
         }
@@ -966,21 +1140,39 @@ private fun DetailUnavailableCard(errorMessage: String?, onBack: () -> Unit, onR
 @Composable
 private fun EmptyQueueCard(title: String, body: String, eyebrow: String, accent: Color) {
     ShellCard {
-        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(eyebrow, style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.SemiBold)
-            Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
-            Text(body, style = MaterialTheme.typography.bodyLarge, color = Slate200)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                CompactInfoCard(
-                    title = "Next move",
-                    value = if (eyebrow == "EMPTY QUEUE") "Create order" else "Clear filters",
-                    modifier = Modifier.weight(1f)
-                )
-                CompactInfoCard(
-                    title = "Mode",
-                    value = if (eyebrow == "EMPTY QUEUE") "Fresh start" else "Narrow slice",
-                    modifier = Modifier.weight(1f)
-                )
+        BoxWithConstraints {
+            val isCompact = maxWidth < 360.dp
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(eyebrow, style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.SemiBold)
+                Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(body, style = MaterialTheme.typography.bodyLarge, color = Slate200)
+                if (isCompact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        CompactInfoCard(
+                            title = "Next move",
+                            value = if (eyebrow == "EMPTY QUEUE") "Create order" else "Clear filters",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        CompactInfoCard(
+                            title = "Mode",
+                            value = if (eyebrow == "EMPTY QUEUE") "Fresh start" else "Narrow slice",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        CompactInfoCard(
+                            title = "Next move",
+                            value = if (eyebrow == "EMPTY QUEUE") "Create order" else "Clear filters",
+                            modifier = Modifier.weight(1f)
+                        )
+                        CompactInfoCard(
+                            title = "Mode",
+                            value = if (eyebrow == "EMPTY QUEUE") "Fresh start" else "Narrow slice",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
             }
         }
     }
@@ -1001,44 +1193,76 @@ private fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectOr
         shape = RoundedCornerShape(24.dp),
         border = BorderStroke(1.dp, if (isSelected) Blue300.copy(alpha = 0.55f) else Slate300.copy(alpha = 0.18f))
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
-                    Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (isSelected) "Ready in focus lane" else "Tap to open details",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isSelected) Mint400 else Slate300
-                    )
+        BoxWithConstraints {
+            val isCompact = maxWidth < 360.dp
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (isCompact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (isSelected) "Ready in focus lane" else "Tap to open details",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSelected) Mint400 else Slate300
+                            )
+                        }
+                        StatusBadge(label = order.statusLabel, accent = order.statusColor)
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
+                            Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (isSelected) "Ready in focus lane" else "Tap to open details",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isSelected) Mint400 else Slate300
+                            )
+                        }
+                        StatusBadge(label = order.statusLabel, accent = order.statusColor)
+                    }
                 }
-                StatusBadge(label = order.statusLabel, accent = order.statusColor)
-            }
-            Text(
-                order.title,
-                style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                CompactMetaPill(
-                    label = "Customer",
-                    value = order.customerName,
-                    modifier = Modifier.weight(1f)
+                Text(
+                    order.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
-                CompactMetaPill(
-                    label = "Updated",
-                    value = compactTimestampLabel(order.updatedAtLabel),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (isSelected) {
-                FeedbackInline(label = "Selected for detail view", accent = Mint400)
+                if (isCompact) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        CompactMetaPill(
+                            label = "Customer",
+                            value = order.customerName,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        CompactMetaPill(
+                            label = "Updated",
+                            value = compactTimestampLabel(order.updatedAtLabel),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        CompactMetaPill(
+                            label = "Customer",
+                            value = order.customerName,
+                            modifier = Modifier.weight(1f)
+                        )
+                        CompactMetaPill(
+                            label = "Updated",
+                            value = compactTimestampLabel(order.updatedAtLabel),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                if (isSelected) {
+                    FeedbackInline(label = "Selected for detail view", accent = Mint400)
+                }
             }
         }
     }
