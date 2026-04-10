@@ -60,6 +60,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.statusflow.mobile.data.MobileOrderDetail
 import com.statusflow.mobile.data.MobileOrderSummary
+import com.statusflow.mobile.data.MobileSessionStore
+import com.statusflow.mobile.data.MobileSessionSummary
 import com.statusflow.mobile.data.MobileUserSummary
 import com.statusflow.mobile.data.StatusFlowApiRepository
 import com.statusflow.mobile.ui.theme.Amber300
@@ -83,6 +85,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        MobileSessionStore.initialize(applicationContext)
         setContent {
             StatusFlowTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -97,19 +100,30 @@ data class MobileHomeUiState(
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
     val isSubmitting: Boolean = false,
+    val isAuthenticating: Boolean = false,
     val apiBaseUrl: String = BuildConfig.API_BASE_URL,
+    val session: MobileSessionSummary? = null,
     val orders: List<MobileOrderSummary> = emptyList(),
     val users: List<MobileUserSummary> = emptyList(),
     val allowedTransitions: Map<String, List<String>> = emptyMap(),
     val selectedOrderId: String? = null,
     val selectedOrderDetail: MobileOrderDetail? = null,
     val errorMessage: String? = null,
+    val authMessage: String? = null,
     val actionMessage: String? = null
-)
+) {
+    val isAuthenticated: Boolean get() = session != null
+    val isOperator: Boolean get() = session?.role == "operator"
+    val canCreateOrders: Boolean get() = session != null
+}
 
 internal enum class MobileOrderSortOption { UPDATED_DESC, UPDATED_ASC, TITLE_ASC, STATUS_ASC }
 
 object MobileUiTags {
+    const val LOGIN_CARD = "login_card"
+    const val LOGIN_EMAIL_INPUT = "login_email_input"
+    const val LOGIN_PASSWORD_INPUT = "login_password_input"
+    const val LOGIN_SUBMIT = "login_submit"
     const val SCREEN_TITLE = "screen_title"
     const val SCROLL_CONTENT = "scroll_content"
     const val QUEUE_OVERVIEW = "queue_overview"
@@ -137,15 +151,71 @@ class MobileHomeViewModel(
     private val _uiState = MutableStateFlow(MobileHomeUiState())
     val uiState: StateFlow<MobileHomeUiState> = _uiState.asStateFlow()
 
-    init { refresh(true) }
+    init {
+        val storedSession = repository.getStoredSession()
+        _uiState.value = _uiState.value.copy(
+            isLoading = storedSession != null,
+            session = storedSession
+        )
+        if (storedSession != null) {
+            refresh(true)
+        } else {
+            _uiState.value = _uiState.value.copy(isLoading = false)
+        }
+    }
+
+    fun signIn(email: String, password: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isAuthenticating = true,
+                authMessage = null,
+                errorMessage = null,
+                actionMessage = null
+            )
+            runCatching {
+                repository.login(email, password)
+            }.onSuccess { session ->
+                _uiState.value = MobileHomeUiState(
+                    isLoading = true,
+                    apiBaseUrl = BuildConfig.API_BASE_URL,
+                    session = session
+                )
+                refresh(true)
+            }.onFailure { throwable ->
+                _uiState.value = _uiState.value.copy(
+                    isAuthenticating = false,
+                    authMessage = throwable.message ?: "Sign-in failed. Check your credentials and try again."
+                )
+            }
+        }
+    }
+
+    fun signOut() {
+        repository.clearSession()
+        _uiState.value = MobileHomeUiState(
+            isLoading = false,
+            apiBaseUrl = BuildConfig.API_BASE_URL,
+            authMessage = "Signed out. Sign back in to continue."
+        )
+    }
 
     fun refresh(showLoader: Boolean = true) {
+        if (!_uiState.value.isAuthenticated) {
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                isRefreshing = false,
+                errorMessage = null
+            )
+            return
+        }
         viewModelScope.launch {
-            val currentSelection = _uiState.value.selectedOrderId
+            val currentState = _uiState.value
+            val currentSelection = currentState.selectedOrderId
             _uiState.value = _uiState.value.copy(
                 isLoading = if (showLoader) true else _uiState.value.isLoading,
                 isRefreshing = !showLoader,
                 errorMessage = null,
+                authMessage = null,
                 actionMessage = null
             )
             runCatching {
@@ -154,10 +224,8 @@ class MobileHomeViewModel(
                 val detail = selectedOrderId?.let { orderId -> repository.fetchOrderDetail(orderId) }
                 Triple(dashboard, selectedOrderId, detail)
             }.onSuccess { (dashboard, selectedOrderId, detail) ->
-                _uiState.value = MobileHomeUiState(
-                    isLoading = false,
-                    isRefreshing = false,
-                    apiBaseUrl = BuildConfig.API_BASE_URL,
+                _uiState.value = authenticatedState(
+                    previousState = currentState,
                     orders = dashboard.orders,
                     users = dashboard.users,
                     allowedTransitions = dashboard.allowedTransitions,
@@ -165,11 +233,20 @@ class MobileHomeViewModel(
                     selectedOrderDetail = detail
                 )
             }.onFailure { throwable ->
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    isRefreshing = false,
-                    errorMessage = throwable.message ?: "Unknown network error."
-                )
+                if (isUnauthorized(throwable)) {
+                    repository.clearSession()
+                    _uiState.value = MobileHomeUiState(
+                        isLoading = false,
+                        apiBaseUrl = BuildConfig.API_BASE_URL,
+                        authMessage = "Your session expired. Sign in again to continue."
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isRefreshing = false,
+                        errorMessage = throwable.message ?: "Unknown network error."
+                    )
+                }
             }
         }
     }
@@ -193,9 +270,19 @@ class MobileHomeViewModel(
     }
 
     fun createOrder(title: String, description: String) {
-        val customer = uiState.value.users.firstOrNull { it.role == "customer" }
+        val state = uiState.value
+        val session = state.session
+        if (session == null) {
+            _uiState.value = state.copy(authMessage = "Sign in before creating an order.")
+            return
+        }
+        val customer = if (session.role == "customer") {
+            state.users.firstOrNull { it.email == session.email } ?: state.users.firstOrNull { it.role == "customer" }
+        } else {
+            state.users.firstOrNull { it.role == "customer" }
+        }
         if (customer == null) {
-            _uiState.value = _uiState.value.copy(actionMessage = "Customer seed user is missing.")
+            _uiState.value = state.copy(actionMessage = "Customer account is unavailable.")
             return
         }
         viewModelScope.launch {
@@ -207,26 +294,32 @@ class MobileHomeViewModel(
                 val detail = newestOrder?.id?.let { orderId -> repository.fetchOrderDetail(orderId) }
                 Triple(dashboard, newestOrder?.id, detail)
             }.onSuccess { (dashboard, selectedOrderId, detail) ->
-                _uiState.value = MobileHomeUiState(
-                    isLoading = false,
-                    isRefreshing = false,
+                _uiState.value = authenticatedState(
+                    previousState = state,
                     isSubmitting = false,
-                    apiBaseUrl = BuildConfig.API_BASE_URL,
                     orders = dashboard.orders,
                     users = dashboard.users,
                     allowedTransitions = dashboard.allowedTransitions,
                     selectedOrderId = selectedOrderId,
                     selectedOrderDetail = detail,
-                    actionMessage = "Order created successfully."
+                    actionMessage = if (session.role == "customer") "Order created and queued for operator review." else "Order created successfully."
                 )
             }.onFailure { throwable ->
-                _uiState.value = _uiState.value.copy(isSubmitting = false, actionMessage = throwable.message ?: "Order creation failed.")
+                if (isUnauthorized(throwable)) {
+                    signOut()
+                } else {
+                    _uiState.value = _uiState.value.copy(isSubmitting = false, actionMessage = throwable.message ?: "Order creation failed.")
+                }
             }
         }
     }
 
     fun transitionOrder(toStatus: String) {
         val state = uiState.value
+        if (!state.isOperator) {
+            _uiState.value = state.copy(actionMessage = "Only operators can change order status.")
+            return
+        }
         val selectedOrderId = state.selectedOrderId
         val operator = state.users.firstOrNull { it.role == "operator" }
         if (selectedOrderId == null) {
@@ -247,6 +340,10 @@ class MobileHomeViewModel(
 
     fun addComment(body: String) {
         val state = uiState.value
+        if (!state.isOperator) {
+            _uiState.value = state.copy(actionMessage = "Only operators can leave queue comments.")
+            return
+        }
         val selectedOrderId = state.selectedOrderId
         val operator = state.users.firstOrNull { it.role == "operator" }
         if (selectedOrderId == null) {
@@ -279,11 +376,9 @@ class MobileHomeViewModel(
                 val detail = repository.fetchOrderDetail(selectedOrderId)
                 dashboard to detail
             }.onSuccess { (dashboard, detail) ->
-                _uiState.value = MobileHomeUiState(
-                    isLoading = false,
-                    isRefreshing = false,
+                _uiState.value = authenticatedState(
+                    previousState = state,
                     isSubmitting = false,
-                    apiBaseUrl = BuildConfig.API_BASE_URL,
                     orders = dashboard.orders,
                     users = dashboard.users,
                     allowedTransitions = dashboard.allowedTransitions,
@@ -292,9 +387,43 @@ class MobileHomeViewModel(
                     actionMessage = successMessage(detail)
                 )
             }.onFailure { throwable ->
-                _uiState.value = _uiState.value.copy(isSubmitting = false, actionMessage = throwable.message ?: "Action failed.")
+                if (isUnauthorized(throwable)) {
+                    signOut()
+                } else {
+                    _uiState.value = _uiState.value.copy(isSubmitting = false, actionMessage = throwable.message ?: "Action failed.")
+                }
             }
         }
+    }
+
+    private fun authenticatedState(
+        previousState: MobileHomeUiState,
+        orders: List<MobileOrderSummary>,
+        users: List<MobileUserSummary>,
+        allowedTransitions: Map<String, List<String>>,
+        selectedOrderId: String?,
+        selectedOrderDetail: MobileOrderDetail?,
+        isSubmitting: Boolean = false,
+        actionMessage: String? = null
+    ): MobileHomeUiState {
+        return MobileHomeUiState(
+            isLoading = false,
+            isRefreshing = false,
+            isSubmitting = isSubmitting,
+            isAuthenticating = false,
+            apiBaseUrl = BuildConfig.API_BASE_URL,
+            session = previousState.session,
+            orders = orders,
+            users = users,
+            allowedTransitions = allowedTransitions,
+            selectedOrderId = selectedOrderId,
+            selectedOrderDetail = selectedOrderDetail,
+            actionMessage = actionMessage
+        )
+    }
+
+    private fun isUnauthorized(throwable: Throwable): Boolean {
+        return throwable.message?.contains("401") == true
     }
 }
 
@@ -307,6 +436,8 @@ fun MobileHomeRoute() {
     val state by viewModel.uiState.collectAsState()
     MobileHomeScreen(
         state = state,
+        onSignIn = viewModel::signIn,
+        onSignOut = viewModel::signOut,
         onRefresh = { viewModel.refresh(false) },
         onCreateOrder = viewModel::createOrder,
         onSelectOrder = viewModel::selectOrder,
@@ -319,12 +450,16 @@ fun MobileHomeRoute() {
 @Composable
 fun MobileHomeScreen(
     state: MobileHomeUiState,
+    onSignIn: (String, String) -> Unit,
+    onSignOut: () -> Unit,
     onRefresh: () -> Unit,
     onCreateOrder: (String, String) -> Unit,
     onSelectOrder: (String) -> Unit,
     onTransitionOrder: (String) -> Unit,
     onAddComment: (String) -> Unit
 ) {
+    var email by rememberSaveable { mutableStateOf("operator@example.com") }
+    var password by rememberSaveable { mutableStateOf("operator123") }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var commentBody by remember { mutableStateOf("") }
@@ -364,7 +499,7 @@ fun MobileHomeScreen(
                 )
                 .padding(padding)
         ) {
-            PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+            if (!state.isAuthenticated) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().testTag(MobileUiTags.SCROLL_CONTENT).padding(horizontal = 20.dp, vertical = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -372,154 +507,184 @@ fun MobileHomeScreen(
                 ) {
                     item { ScreenTitle() }
                     item {
-                        QueueOverviewCard(
-                            totalOrders = state.orders.size,
-                            visibleOrders = visibleOrders.size,
-                            selectedOrderCode = state.selectedOrderDetail?.code,
-                            activeFilterLabel = statusFilter?.let(::statusLabel)
-                        )
-                    }
-                    item {
-                        ListControlsCard(
-                            searchQuery = searchQuery,
-                            selectedStatus = statusFilter,
-                            availableStatuses = availableStatuses,
-                            sortOption = sortOption,
-                            onSearchQueryChange = { searchQuery = it },
-                            onSelectStatus = { selected -> statusFilter = if (statusFilter == selected) null else selected },
-                            onToggleSort = {
-                                sortOptionName = when (sortOption) {
-                                    MobileOrderSortOption.UPDATED_DESC -> MobileOrderSortOption.UPDATED_ASC
-                                    MobileOrderSortOption.UPDATED_ASC -> MobileOrderSortOption.TITLE_ASC
-                                    MobileOrderSortOption.TITLE_ASC -> MobileOrderSortOption.STATUS_ASC
-                                    MobileOrderSortOption.STATUS_ASC -> MobileOrderSortOption.UPDATED_DESC
-                                }.name
-                            }
-                        )
-                    }
-                    if (state.actionMessage != null) {
-                        item {
-                            FeedbackCard(
-                                title = "Latest action",
-                                body = state.actionMessage,
-                                accent = Mint400,
-                                surface = Navy700,
-                                eyebrow = "ACTION"
-                            )
-                        }
-                    }
-
-                    when {
-                        state.isLoading -> {
-                            item {
-                                FeedbackCard(
-                                    title = "Syncing orders",
-                                    body = "Fetching the latest order list from the API and rebuilding the queue snapshot.",
-                                    accent = Blue300,
-                                    surface = Navy500,
-                                    eyebrow = "LIVE SYNC"
-                                )
-                            }
-                        }
-                        state.errorMessage != null -> {
-                            item {
-                                FeedbackCard(
-                                    title = "Sync failed",
-                                    body = state.errorMessage,
-                                    accent = Red300,
-                                    surface = Navy700,
-                                    eyebrow = "ERROR"
-                                )
-                            }
-                        }
-                        else -> {
-                            if (isShowingDetail && state.selectedOrderId != null) {
-                                item {
-                                    QueueSectionHeader(
-                                        title = if (state.selectedOrderDetail != null) "Selected order" else "Order detail",
-                                        subtitle = if (state.selectedOrderDetail != null) {
-                                            "Review details, update status, and leave context for the next operator."
-                                        } else {
-                                            "Recover gracefully when a selected order is temporarily unavailable."
-                                        }
-                                    )
-                                }
-                                item {
-                                    if (state.selectedOrderDetail != null) {
-                                        DetailScreenCard(
-                                            detail = state.selectedOrderDetail,
-                                            allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
-                                            isSubmitting = state.isSubmitting,
-                                            actionMessage = state.actionMessage,
-                                            commentBody = commentBody,
-                                            onCommentBodyChange = { commentBody = it },
-                                            onTransitionOrder = onTransitionOrder,
-                                            onAddComment = { onAddComment(commentBody.trim()) },
-                                            onBack = { isShowingDetail = false }
-                                        )
-                                    } else {
-                                        DetailUnavailableCard(
-                                            errorMessage = state.errorMessage,
-                                            onBack = { isShowingDetail = false },
-                                            onRefresh = onRefresh
-                                        )
-                                    }
-                                }
-                            } else {
-                                item {
-                                    QueueSectionHeader(
-                                        title = "Active queue",
-                                        subtitle = "Tap any card to move from scan mode into detail mode."
-                                    )
-                                }
-                                if (visibleOrders.isEmpty()) {
-                                    item {
-                                        EmptyQueueCard(
-                                            title = if (state.orders.isEmpty()) "No orders yet" else "No orders match your current view",
-                                            body = if (state.orders.isEmpty()) {
-                                                "Create the first order from this screen or pull down to refresh when the backend receives new work."
-                                            } else {
-                                                "Try clearing the current filter, editing the search text, or changing the sort to inspect a different slice of the queue."
-                                            },
-                                            eyebrow = if (state.orders.isEmpty()) "EMPTY QUEUE" else "FILTERED VIEW",
-                                            accent = if (state.orders.isEmpty()) Blue300 else Amber300
-                                        )
-                                    }
-                                } else {
-                                    items(visibleOrders) { item ->
-                                        OrderCard(
-                                            order = item,
-                                            isSelected = state.selectedOrderId == item.id,
-                                            onSelectOrder = {
-                                                onSelectOrder(it)
-                                                isShowingDetail = true
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    item {
-                        CreateOrderCard(
-                            title = title,
-                            description = description,
-                            isExpanded = isCreateExpanded,
-                            isSubmitting = state.isSubmitting,
-                            isLoading = state.isLoading || state.isRefreshing,
-                            onTitleChange = { title = it },
-                            onDescriptionChange = { description = it },
-                            onCreate = {
-                                onCreateOrder(title.trim(), description.trim())
-                                title = ""
-                                description = ""
-                                isCreateExpanded = false
-                            },
-                            onRefresh = onRefresh,
-                            onToggleExpanded = { isCreateExpanded = !isCreateExpanded }
+                        LoginCard(
+                            email = email,
+                            password = password,
+                            isSubmitting = state.isAuthenticating,
+                            authMessage = state.authMessage,
+                            onEmailChange = { email = it },
+                            onPasswordChange = { password = it },
+                            onSignIn = { onSignIn(email.trim(), password) }
                         )
                     }
                     item { ApiCard(state.apiBaseUrl) }
+                }
+            } else {
+                PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().testTag(MobileUiTags.SCROLL_CONTENT).padding(horizontal = 20.dp, vertical = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        item { ScreenTitle(session = state.session, onSignOut = onSignOut) }
+                        item {
+                            QueueOverviewCard(
+                                totalOrders = state.orders.size,
+                                visibleOrders = visibleOrders.size,
+                                selectedOrderCode = state.selectedOrderDetail?.code,
+                                activeFilterLabel = statusFilter?.let(::statusLabel)
+                            )
+                        }
+                        item {
+                            ListControlsCard(
+                                searchQuery = searchQuery,
+                                selectedStatus = statusFilter,
+                                availableStatuses = availableStatuses,
+                                sortOption = sortOption,
+                                onSearchQueryChange = { searchQuery = it },
+                                onSelectStatus = { selected -> statusFilter = if (statusFilter == selected) null else selected },
+                                onToggleSort = {
+                                    sortOptionName = when (sortOption) {
+                                        MobileOrderSortOption.UPDATED_DESC -> MobileOrderSortOption.UPDATED_ASC
+                                        MobileOrderSortOption.UPDATED_ASC -> MobileOrderSortOption.TITLE_ASC
+                                        MobileOrderSortOption.TITLE_ASC -> MobileOrderSortOption.STATUS_ASC
+                                        MobileOrderSortOption.STATUS_ASC -> MobileOrderSortOption.UPDATED_DESC
+                                    }.name
+                                }
+                            )
+                        }
+                        if (state.actionMessage != null) {
+                            item {
+                                FeedbackCard(
+                                    title = "Latest action",
+                                    body = state.actionMessage,
+                                    accent = Mint400,
+                                    surface = Navy700,
+                                    eyebrow = "ACTION"
+                                )
+                            }
+                        }
+
+                        when {
+                            state.isLoading -> {
+                                item {
+                                    FeedbackCard(
+                                        title = "Syncing orders",
+                                        body = "Fetching the latest order list from the API and rebuilding the queue snapshot.",
+                                        accent = Blue300,
+                                        surface = Navy500,
+                                        eyebrow = "LIVE SYNC"
+                                    )
+                                }
+                            }
+                            state.errorMessage != null -> {
+                                item {
+                                    FeedbackCard(
+                                        title = "Sync failed",
+                                        body = state.errorMessage,
+                                        accent = Red300,
+                                        surface = Navy700,
+                                        eyebrow = "ERROR"
+                                    )
+                                }
+                            }
+                            else -> {
+                                if (isShowingDetail && state.selectedOrderId != null) {
+                                    item {
+                                        QueueSectionHeader(
+                                            title = if (state.selectedOrderDetail != null) "Selected order" else "Order detail",
+                                            subtitle = if (state.selectedOrderDetail != null) {
+                                                if (state.isOperator) "Review details, update status, and leave context for the next operator."
+                                                else "Review the order timeline and track the latest status from your phone."
+                                            } else {
+                                                "Recover gracefully when a selected order is temporarily unavailable."
+                                            }
+                                        )
+                                    }
+                                    item {
+                                        if (state.selectedOrderDetail != null) {
+                                            DetailScreenCard(
+                                                detail = state.selectedOrderDetail,
+                                                allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
+                                                isSubmitting = state.isSubmitting,
+                                                actionMessage = state.actionMessage,
+                                                commentBody = commentBody,
+                                                onCommentBodyChange = { commentBody = it },
+                                                onTransitionOrder = onTransitionOrder,
+                                                onAddComment = { onAddComment(commentBody.trim()) },
+                                                onBack = { isShowingDetail = false },
+                                                isOperator = state.isOperator
+                                            )
+                                        } else {
+                                            DetailUnavailableCard(
+                                                errorMessage = state.errorMessage,
+                                                onBack = { isShowingDetail = false },
+                                                onRefresh = onRefresh
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    item {
+                                        QueueSectionHeader(
+                                            title = "Active queue",
+                                            subtitle = "Tap any card to move from scan mode into detail mode."
+                                        )
+                                    }
+                                    if (visibleOrders.isEmpty()) {
+                                        item {
+                                            EmptyQueueCard(
+                                                title = if (state.orders.isEmpty()) "No orders yet" else "No orders match your current view",
+                                                body = if (state.orders.isEmpty()) {
+                                                    "Create the first order from this screen or pull down to refresh when the backend receives new work."
+                                                } else {
+                                                    "Try clearing the current filter, editing the search text, or changing the sort to inspect a different slice of the queue."
+                                                },
+                                                eyebrow = if (state.orders.isEmpty()) "EMPTY QUEUE" else "FILTERED VIEW",
+                                                accent = if (state.orders.isEmpty()) Blue300 else Amber300
+                                            )
+                                        }
+                                    } else {
+                                        items(visibleOrders) { item ->
+                                            OrderCard(
+                                                order = item,
+                                                isSelected = state.selectedOrderId == item.id,
+                                                onSelectOrder = {
+                                                    onSelectOrder(it)
+                                                    isShowingDetail = true
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        item {
+                            CreateOrderCard(
+                                title = title,
+                                description = description,
+                                isExpanded = isCreateExpanded,
+                                isSubmitting = state.isSubmitting,
+                                isLoading = state.isLoading || state.isRefreshing,
+                                isEnabled = state.canCreateOrders,
+                                helperText = if (state.isOperator) {
+                                    "Operator mode can still capture new work into the shared queue."
+                                } else {
+                                    "Customer mode submits directly into the same shared queue."
+                                },
+                                onTitleChange = { title = it },
+                                onDescriptionChange = { description = it },
+                                onCreate = {
+                                    onCreateOrder(title.trim(), description.trim())
+                                    title = ""
+                                    description = ""
+                                    isCreateExpanded = false
+                                },
+                                onRefresh = onRefresh,
+                                onToggleExpanded = { isCreateExpanded = !isCreateExpanded }
+                            )
+                        }
+                        item { ApiCard(state.apiBaseUrl) }
+                    }
                 }
             }
         }
@@ -527,26 +692,151 @@ fun MobileHomeScreen(
 }
 
 @Composable
-internal fun ScreenTitle() {
-    Column(modifier = Modifier.testTag(MobileUiTags.SCREEN_TITLE), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            "MOBILE OPS",
-            style = MaterialTheme.typography.labelLarge,
-            color = Blue300,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            "StatusFlow",
-            modifier = Modifier.semantics { heading() },
-            style = MaterialTheme.typography.headlineMedium,
-            color = Color.White,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            "Queue-first control for the same shared workflow used on web.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Slate300
-        )
+internal fun ScreenTitle(session: MobileSessionSummary? = null, onSignOut: (() -> Unit)? = null) {
+    BoxWithConstraints(modifier = Modifier.testTag(MobileUiTags.SCREEN_TITLE)) {
+        val isCompact = maxWidth < 360.dp
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (isCompact || session == null || onSignOut == null) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        if (session?.role == "customer") "MOBILE PORTAL" else "MOBILE OPS",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Blue300,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        "StatusFlow",
+                        modifier = Modifier.semantics { heading() },
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        if (session == null) {
+                            "Sign in to reach the same live workflow used across web and mobile."
+                        } else {
+                            "Queue-first control for the same shared workflow used on web."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Slate300
+                    )
+                }
+                if (session != null && onSignOut != null) {
+                    SessionIdentityCard(session = session, onSignOut = onSignOut, modifier = Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
+                        Text(
+                            if (session.role == "customer") "MOBILE PORTAL" else "MOBILE OPS",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Blue300,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "StatusFlow",
+                            modifier = Modifier.semantics { heading() },
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Queue-first control for the same shared workflow used on web.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Slate300
+                        )
+                    }
+                    SessionIdentityCard(session = session, onSignOut = onSignOut, modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionIdentityCard(session: MobileSessionSummary, onSignOut: () -> Unit, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.96f)),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, Slate300.copy(alpha = 0.18f))
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Signed in", style = MaterialTheme.typography.labelMedium, color = Blue300)
+            Text(session.name, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("${session.role.replaceFirstChar { it.uppercase() }} | ${session.email}", style = MaterialTheme.typography.bodySmall, color = Slate300)
+            Button(
+                onClick = onSignOut,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Navy600, contentColor = Slate100),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Sign out")
+            }
+        }
+    }
+}
+
+@Composable
+internal fun LoginCard(
+    email: String,
+    password: String,
+    isSubmitting: Boolean,
+    authMessage: String?,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onSignIn: () -> Unit
+) {
+    ShellCard(modifier = Modifier.testTag(MobileUiTags.LOGIN_CARD)) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            SectionLabel(
+                title = "Sign in to the live queue",
+                subtitle = "Use the seeded operator or customer account to enter the shared workflow."
+            )
+            CompactInfoCard(title = "Seeded operator", value = "operator@example.com / operator123", modifier = Modifier.fillMaxWidth())
+            CompactInfoCard(title = "Seeded customer", value = "customer@example.com / customer123", modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = email,
+                onValueChange = onEmailChange,
+                label = { Text("Email") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.LOGIN_EMAIL_INPUT)
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = onPasswordChange,
+                label = { Text("Password") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.LOGIN_PASSWORD_INPUT)
+            )
+            if (authMessage != null) {
+                FeedbackCard(
+                    title = "Sign-in status",
+                    body = authMessage,
+                    accent = if (authMessage.contains("expired", ignoreCase = true) || authMessage.contains("signed out", ignoreCase = true)) Amber300 else Red300,
+                    surface = Navy700,
+                    eyebrow = "AUTH"
+                )
+            }
+            Button(
+                enabled = !isSubmitting && email.isNotBlank() && password.isNotBlank(),
+                onClick = onSignIn,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Blue400,
+                    contentColor = Navy900,
+                    disabledContainerColor = Navy600,
+                    disabledContentColor = Slate300
+                ),
+                modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.LOGIN_SUBMIT)
+            ) {
+                Text(if (isSubmitting) "Signing in..." else "Sign in")
+            }
+        }
     }
 }
 
@@ -687,6 +977,8 @@ internal fun CreateOrderCard(
     isExpanded: Boolean,
     isSubmitting: Boolean,
     isLoading: Boolean,
+    isEnabled: Boolean,
+    helperText: String,
     onTitleChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onCreate: () -> Unit,
@@ -702,14 +994,13 @@ internal fun CreateOrderCard(
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Create order", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
                             Text(
-                                if (isExpanded) "Capture new work without leaving the queue."
-                                else "Open a compact composer when you need to add work.",
+                                if (isExpanded) helperText else "Open a compact composer when you need to add work.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Slate300
                             )
                         }
                         Button(
-                            enabled = !isSubmitting,
+                            enabled = !isSubmitting && isEnabled,
                             onClick = onToggleExpanded,
                             modifier = Modifier
                                 .testTag(MobileUiTags.CREATE_TOGGLE)
@@ -737,14 +1028,13 @@ internal fun CreateOrderCard(
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
                             Text("Create order", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
                             Text(
-                                if (isExpanded) "Capture new work without leaving the queue."
-                                else "Open a compact composer when you need to add work.",
+                                if (isExpanded) helperText else "Open a compact composer when you need to add work.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Slate300
                             )
                         }
                         Button(
-                            enabled = !isSubmitting,
+                            enabled = !isSubmitting && isEnabled,
                             onClick = onToggleExpanded,
                             modifier = Modifier
                                 .testTag(MobileUiTags.CREATE_TOGGLE)
@@ -786,7 +1076,7 @@ internal fun CreateOrderCard(
                     if (isCompact) {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                             Button(
-                                enabled = !isSubmitting && title.length >= 3,
+                                enabled = !isSubmitting && isEnabled && title.length >= 3,
                                 onClick = onCreate,
                                 shape = RoundedCornerShape(16.dp),
                                 colors = ButtonDefaults.buttonColors(
@@ -818,7 +1108,7 @@ internal fun CreateOrderCard(
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                             Button(
-                                enabled = !isSubmitting && title.length >= 3,
+                                enabled = !isSubmitting && isEnabled && title.length >= 3,
                                 onClick = onCreate,
                                 shape = RoundedCornerShape(16.dp),
                                 colors = ButtonDefaults.buttonColors(
@@ -864,6 +1154,9 @@ internal fun CreateOrderCard(
                     ) {
                         Text("Refresh")
                     }
+                }
+                if (!isEnabled) {
+                    FeedbackInline(label = "Sign in before creating a new order", accent = Amber300)
                 }
             }
         }
@@ -995,7 +1288,8 @@ internal fun DetailScreenCard(
     onCommentBodyChange: (String) -> Unit,
     onTransitionOrder: (String) -> Unit,
     onAddComment: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    isOperator: Boolean
 ) {
     BoxWithConstraints {
         val isCompact = maxWidth < 360.dp
@@ -1066,7 +1360,9 @@ internal fun DetailScreenCard(
             }
 
             DetailSectionCard(title = "Next steps", subtitle = "Move the order through the allowed lifecycle only.") {
-                if (allowedTransitions.isEmpty()) {
+                if (!isOperator) {
+                    Text("Customer mode is read-only for status changes.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
+                } else if (allowedTransitions.isEmpty()) {
                     Text("This order is already in a terminal state.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1096,30 +1392,34 @@ internal fun DetailScreenCard(
                 }
             }
 
-            DetailSectionCard(title = "Comments", subtitle = "Leave a note for the next operator.") {
-                Button(
-                    enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
-                    onClick = onAddComment,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Mint400,
-                        contentColor = Navy900,
-                        disabledContainerColor = Navy600,
-                        disabledContentColor = Slate300
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_SUBMIT)
-                ) {
-                    Text(if (isSubmitting) "Sending..." else "Post comment")
+            DetailSectionCard(title = "Comments", subtitle = if (isOperator) "Leave a note for the next operator." else "Comments are available in operator mode.") {
+                if (isOperator) {
+                    Button(
+                        enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
+                        onClick = onAddComment,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Mint400,
+                            contentColor = Navy900,
+                            disabledContainerColor = Navy600,
+                            disabledContentColor = Slate300
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_SUBMIT)
+                    ) {
+                        Text(if (isSubmitting) "Sending..." else "Post comment")
+                    }
+                    OutlinedTextField(
+                        value = commentBody,
+                        onValueChange = onCommentBodyChange,
+                        label = { Text("Add operator note") },
+                        modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_INPUT).semantics {
+                            contentDescription = "Add operator note"
+                        },
+                        minLines = 2
+                    )
+                } else {
+                    FeedbackInline(label = "Sign in as an operator to leave queue notes", accent = Amber300)
                 }
-                OutlinedTextField(
-                    value = commentBody,
-                    onValueChange = onCommentBodyChange,
-                    label = { Text("Add operator note") },
-                    modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_INPUT).semantics {
-                        contentDescription = "Add operator note"
-                    },
-                    minLines = 2
-                )
                 if (detail.comments.isEmpty()) {
                     Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
                 } else {

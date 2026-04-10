@@ -11,8 +11,13 @@ Planned responsibilities:
 
 ## Current scaffold
 
-The app now includes a minimal Jetpack Compose Android shell with a single
-screen that can become the base for auth, order list, and sync flows.
+The app now includes a Jetpack Compose Android client with:
+
+- sign-in for seeded operator and customer accounts
+- queue and order detail screens against the live API
+- create-order flow
+- comments and status changes in operator mode
+- pull-to-refresh, empty states, and device smoke coverage
 
 ## Local build
 
@@ -39,7 +44,7 @@ This will:
 - install and launch the app
 - verify the focused activity
 - capture a screenshot and UI hierarchy dump
-- assert key queue-first markers are visible in the rendered screen
+- assert key login or queue markers are visible in the rendered screen
 
 Artifacts are written to:
 
@@ -57,6 +62,7 @@ From `apps/mobile`:
 The current instrumentation layer covers:
 
 - queue header and overview rendering
+- login card rendering
 - create-order composer submission
 - order-card selection callback
 - detail-screen status transition
@@ -66,7 +72,10 @@ The current instrumentation layer covers:
 
 - default emulator API base URL: `http://10.0.2.2:8000/`
 - override at build time with `-PstatusflowApiBaseUrl=http://your-host:8000/`
-- the current mobile screen can fetch orders, preserve search/filter/sort state, support pull-to-refresh and empty states, and move through a queue-to-detail flow for commenting and status changes
+- seeded credentials:
+  - `operator@example.com / operator123`
+  - `customer@example.com / customer123`
+- the current mobile screen can authenticate, fetch orders, preserve search/filter/sort state, support pull-to-refresh and empty states, and move through a queue-to-detail flow for commenting and status changes
 - the current pass also adds accessibility semantics for primary controls and a graceful fallback when a selected order detail is temporarily unavailable
 - key queue, detail, and composer layouts now collapse more safely on small screens and under larger text scaling
 - the app now also includes a green Compose instrumentation suite for core operator interactions on the emulator

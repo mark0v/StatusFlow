@@ -2,6 +2,7 @@ package com.statusflow.mobile.data
 
 import com.statusflow.mobile.BuildConfig
 import okhttp3.OkHttpClient
+import okhttp3.Interceptor
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -24,6 +25,25 @@ data class UserApiResponse(
     val email: String,
     val name: String,
     val role: String
+)
+
+data class LoginRequest(
+    val email: String,
+    val password: String
+)
+
+data class AuthUserApiResponse(
+    val id: String,
+    val email: String,
+    val name: String,
+    val role: String
+)
+
+data class AuthSessionApiResponse(
+    val access_token: String,
+    val token_type: String,
+    val expires_in_seconds: Int,
+    val user: AuthUserApiResponse
 )
 
 data class OrderCommentAuthorApiResponse(
@@ -89,6 +109,9 @@ data class AddCommentRequest(
 )
 
 interface OrderApiService {
+    @POST("auth/login")
+    suspend fun login(@Body payload: LoginRequest): AuthSessionApiResponse
+
     @GET("orders")
     suspend fun listOrders(): List<OrderApiResponse>
 
@@ -121,7 +144,17 @@ object OrderApiClient {
     private val loggingInterceptor =
         HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC }
 
+    private val authInterceptor = Interceptor { chain ->
+        val currentSession = MobileSessionStore.currentSession()
+        val requestBuilder = chain.request().newBuilder()
+        if (currentSession != null) {
+            requestBuilder.header("Authorization", "Bearer ${currentSession.accessToken}")
+        }
+        chain.proceed(requestBuilder.build())
+    }
+
     private val okHttpClient = OkHttpClient.Builder()
+        .addInterceptor(authInterceptor)
         .addInterceptor(loggingInterceptor)
         .build()
 

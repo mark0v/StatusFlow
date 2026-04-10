@@ -19,6 +19,14 @@ data class MobileOrderSummary(
 
 data class MobileUserSummary(
     val id: String,
+    val email: String,
+    val name: String,
+    val role: String
+)
+
+data class MobileSessionSummary(
+    val accessToken: String,
+    val email: String,
     val name: String,
     val role: String
 )
@@ -61,6 +69,43 @@ data class MobileOrderDetail(
 class StatusFlowApiRepository(
     private val apiService: OrderApiService = OrderApiClient.service
 ) {
+    fun getStoredSession(): MobileSessionSummary? {
+        return MobileSessionStore.currentSession()?.let { session ->
+            MobileSessionSummary(
+                accessToken = session.accessToken,
+                email = session.email,
+                name = session.name,
+                role = session.role
+            )
+        }
+    }
+
+    suspend fun login(email: String, password: String): MobileSessionSummary {
+        val response = apiService.login(
+            LoginRequest(
+                email = email.trim().lowercase(),
+                password = password
+            )
+        )
+        val session = MobileSession(
+            accessToken = response.access_token,
+            email = response.user.email,
+            name = response.user.name,
+            role = response.user.role
+        )
+        MobileSessionStore.saveSession(session)
+        return MobileSessionSummary(
+            accessToken = session.accessToken,
+            email = session.email,
+            name = session.name,
+            role = session.role
+        )
+    }
+
+    fun clearSession() {
+        MobileSessionStore.clearSession()
+    }
+
     suspend fun fetchDashboardData(): MobileDashboardData {
         val users = apiService.listUsers()
         val orders = apiService.listOrders()
@@ -71,6 +116,7 @@ class StatusFlowApiRepository(
             users = users.map { user ->
                 MobileUserSummary(
                     id = user.id,
+                    email = user.email,
                     name = user.name,
                     role = user.role
                 )

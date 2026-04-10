@@ -66,6 +66,8 @@ class MobileHomeScreenTest {
                     isExpanded = true,
                     isSubmitting = false,
                     isLoading = false,
+                    isEnabled = true,
+                    helperText = "Customer mode submits directly into the same shared queue.",
                     onTitleChange = { title = it },
                     onDescriptionChange = { description = it },
                     onCreate = {
@@ -120,7 +122,8 @@ class MobileHomeScreenTest {
                     onCommentBodyChange = {},
                     onTransitionOrder = { transitionedStatus = it },
                     onAddComment = {},
-                    onBack = {}
+                    onBack = {},
+                    isOperator = true
                 )
             }
         }
@@ -155,6 +158,28 @@ class MobileHomeScreenTest {
         composeRule.onNodeWithText("No orders match your current view").assertIsDisplayed()
         composeRule.onNodeWithTag(MobileUiTags.DETAIL_UNAVAILABLE).assertIsDisplayed()
         composeRule.onNodeWithText("Selected order is unavailable").assertIsDisplayed()
+    }
+
+    @Test
+    fun loginCardRendersSeededAccounts() {
+        composeRule.setContent {
+            StatusFlowTheme {
+                LoginCard(
+                    email = "operator@example.com",
+                    password = "operator123",
+                    isSubmitting = false,
+                    authMessage = null,
+                    onEmailChange = {},
+                    onPasswordChange = {},
+                    onSignIn = {}
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(MobileUiTags.LOGIN_CARD).assertIsDisplayed()
+        composeRule.onNodeWithText("Sign in to the live queue").assertIsDisplayed()
+        composeRule.onNodeWithText("operator@example.com / operator123").assertIsDisplayed()
+        composeRule.onNodeWithText("customer@example.com / customer123").assertIsDisplayed()
     }
 
     private fun sampleSummary(): MobileOrderSummary {

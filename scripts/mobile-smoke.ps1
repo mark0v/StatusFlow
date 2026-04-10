@@ -108,11 +108,20 @@ Write-Host "Dumping UI hierarchy..."
 & $adbPath exec-out screencap -p > $screenshotPath
 
 $dumpContent = Get-Content -Path $dumpPath -Raw
-$requiredMarkers = @("StatusFlow", "Active queue", "Queue controls", "Queue snapshot")
+$requiredMarkers = @("StatusFlow")
 $missingMarkers = @($requiredMarkers | Where-Object { $dumpContent -notmatch [regex]::Escape($_) })
 
+$hasQueueMarkers = @("Active queue", "Queue controls", "Queue snapshot") |
+    Where-Object { $dumpContent -match [regex]::Escape($_) }
+$hasLoginMarkers = @("Sign in to the live queue", "Seeded operator", "Seeded customer") |
+    Where-Object { $dumpContent -match [regex]::Escape($_) }
+
 if ($missingMarkers.Count -gt 0) {
-    throw "Mobile smoke check failed. Missing UI markers: $($missingMarkers -join ', ')"
+    throw "Mobile smoke check failed. Missing required UI markers: $($missingMarkers -join ', ')"
+}
+
+if ($hasQueueMarkers.Count -eq 0 -and $hasLoginMarkers.Count -eq 0) {
+    throw "Mobile smoke check failed. Expected either queue markers or login markers in the UI dump."
 }
 
 Write-Host "Mobile smoke check passed."
