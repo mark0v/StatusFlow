@@ -24,6 +24,28 @@ gradlew.bat assembleDebug
 The current workspace uses a repository-local Android toolchain under `.local/`
 for JDK, Gradle, and Android SDK components.
 
+## Device smoke check
+
+From the repo root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/mobile-smoke.ps1 -StartEmulator
+```
+
+This will:
+
+- build the debug APK
+- boot the repo-local emulator if needed
+- install and launch the app
+- verify the focused activity
+- capture a screenshot and UI hierarchy dump
+- assert key queue-first markers are visible in the rendered screen
+
+Artifacts are written to:
+
+- `outputs/mobile-ui/mobile-smoke.png`
+- `outputs/mobile-ui/mobile-smoke.xml`
+
 ## API configuration
 
 - default emulator API base URL: `http://10.0.2.2:8000/`
