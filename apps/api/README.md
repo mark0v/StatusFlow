@@ -15,6 +15,13 @@ Planned responsibilities:
 python -m uvicorn app.main:app --app-dir apps/api --reload
 ```
 
+## Tests
+
+```bash
+python -m pip install --target .test-deps -r apps/api/requirements-dev.txt
+PYTHONPATH=.test-deps;apps/api python -m pytest apps/api/tests -q
+```
+
 ## Current API scope
 
 - order status lifecycle endpoint

@@ -9,6 +9,7 @@ Thumbs.db
 local.properties
 .venv/
 .venv-*/
+.test-deps/
 deps/
 
 node_modules/

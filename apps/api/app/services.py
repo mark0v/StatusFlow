@@ -106,7 +106,7 @@ def transition_order_status(
     if payload.to_status not in allowed_targets:
         allowed = [status.value for status in allowed_targets]
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "message": f"Invalid transition from {order.status.value} to {payload.to_status.value}.",
                 "allowed_transitions": allowed,
