@@ -474,6 +474,14 @@ export default function App() {
           {!isLoading && !error ? (
             <div className="table-wrap">
               <table className="orders-table">
+                <colgroup>
+                  <col className="col-code" />
+                  <col className="col-title" />
+                  <col className="col-customer" />
+                  <col className="col-status" />
+                  <col className="col-updated" />
+                  <col className="col-actions" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Code</th>
@@ -532,59 +540,69 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedOrders.map((order) => {
-                    const nextStatuses = lifecycle?.allowed_transitions[order.status] ?? [];
+                  {sortedOrders.length === 0 ? (
+                    <tr>
+                      <td className="empty-row" colSpan={6}>
+                        <span className="empty-row-eyebrow">No matching orders</span>
+                        <strong>Nothing matches the current status filter.</strong>
+                        <p>Clear one or more status selections to bring orders back into view.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedOrders.map((order) => {
+                      const nextStatuses = lifecycle?.allowed_transitions[order.status] ?? [];
 
-                    return (
-                      <tr key={order.id}>
-                        <td className="cell-code">{order.code}</td>
-                        <td className="cell-title">{order.title}</td>
-                        <td>{order.customer_name}</td>
-                        <td>
-                          <span className={`pill ${statusTone(order.status)}`}>
-                            {statusLabels[order.status]}
-                          </span>
-                        </td>
-                        <td>{formatTimestamp(order.updated_at)}</td>
-                        <td>
-                          <div className="table-actions">
-                            {nextStatuses.length === 0 ? (
-                              <span className="transition-terminal">Terminal state</span>
-                            ) : (
-                              <div className="row-action-menu">
-                                <button
-                                  className="transition-button transition-trigger"
-                                  onClick={() =>
-                                    setOpenActionsOrderId((current) =>
-                                      current === order.id ? null : order.id
-                                    )
-                                  }
-                                  type="button"
-                                >
-                                  Change status
-                                </button>
-                                {openActionsOrderId === order.id ? (
-                                  <div className="row-dropdown">
-                                    {nextStatuses.map((status) => (
-                                      <button
-                                        key={status}
-                                        className="dropdown-action"
-                                        disabled={isSubmitting}
-                                        onClick={() => void handleTransition(order.id, status)}
-                                        type="button"
-                                      >
-                                        {statusLabels[status]}
-                                      </button>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                      return (
+                        <tr key={order.id}>
+                          <td className="cell-code">{order.code}</td>
+                          <td className="cell-title">{order.title}</td>
+                          <td className="cell-customer">{order.customer_name}</td>
+                          <td>
+                            <span className={`pill ${statusTone(order.status)}`}>
+                              {statusLabels[order.status]}
+                            </span>
+                          </td>
+                          <td className="cell-updated">{formatTimestamp(order.updated_at)}</td>
+                          <td className="cell-actions">
+                            <div className="table-actions">
+                              {nextStatuses.length === 0 ? (
+                                <span className="transition-terminal">Terminal state</span>
+                              ) : (
+                                <div className="row-action-menu">
+                                  <button
+                                    className="transition-button transition-trigger"
+                                    onClick={() =>
+                                      setOpenActionsOrderId((current) =>
+                                        current === order.id ? null : order.id
+                                      )
+                                    }
+                                    type="button"
+                                  >
+                                    Change status
+                                  </button>
+                                  {openActionsOrderId === order.id ? (
+                                    <div className="row-dropdown">
+                                      {nextStatuses.map((status) => (
+                                        <button
+                                          key={status}
+                                          className="dropdown-action"
+                                          disabled={isSubmitting}
+                                          onClick={() => void handleTransition(order.id, status)}
+                                          type="button"
+                                        >
+                                          {statusLabels[status]}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
