@@ -16,21 +16,56 @@ data class MobileOrderSummary(
     val updatedAtLabel: String
 )
 
+data class MobileUserSummary(
+    val id: String,
+    val name: String,
+    val role: String
+)
+
+data class MobileDashboardData(
+    val orders: List<MobileOrderSummary>,
+    val users: List<MobileUserSummary>
+)
+
 class StatusFlowApiRepository(
     private val apiService: OrderApiService = OrderApiClient.service
 ) {
-    suspend fun fetchOrders(): List<MobileOrderSummary> {
-        return apiService.listOrders().map { response ->
-            MobileOrderSummary(
-                id = response.id,
-                code = response.code,
-                title = response.title,
-                customerName = response.customer_name,
-                statusLabel = statusLabel(response.status),
-                statusColor = statusColor(response.status),
-                updatedAtLabel = formatTimestamp(response.updated_at)
+    suspend fun fetchDashboardData(): MobileDashboardData {
+        val users = apiService.listUsers()
+        val orders = apiService.listOrders()
+
+        return MobileDashboardData(
+            orders = orders.map(::mapOrder),
+            users = users.map { user ->
+                MobileUserSummary(
+                    id = user.id,
+                    name = user.name,
+                    role = user.role
+                )
+            }
+        )
+    }
+
+    suspend fun createOrder(title: String, description: String, customerId: String) {
+        apiService.createOrder(
+            CreateOrderRequest(
+                title = title,
+                description = description,
+                customer_id = customerId
             )
-        }
+        )
+    }
+
+    private fun mapOrder(response: OrderApiResponse): MobileOrderSummary {
+        return MobileOrderSummary(
+            id = response.id,
+            code = response.code,
+            title = response.title,
+            customerName = response.customer_name,
+            statusLabel = statusLabel(response.status),
+            statusColor = statusColor(response.status),
+            updatedAtLabel = formatTimestamp(response.updated_at)
+        )
     }
 
     private fun statusLabel(status: String): String {

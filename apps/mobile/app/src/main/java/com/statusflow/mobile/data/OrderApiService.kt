@@ -5,7 +5,9 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 
 data class OrderApiResponse(
     val id: String,
@@ -16,9 +18,28 @@ data class OrderApiResponse(
     val updated_at: String
 )
 
+data class UserApiResponse(
+    val id: String,
+    val email: String,
+    val name: String,
+    val role: String
+)
+
+data class CreateOrderRequest(
+    val title: String,
+    val description: String,
+    val customer_id: String
+)
+
 interface OrderApiService {
     @GET("orders")
     suspend fun listOrders(): List<OrderApiResponse>
+
+    @GET("users")
+    suspend fun listUsers(): List<UserApiResponse>
+
+    @POST("orders")
+    suspend fun createOrder(@Body payload: CreateOrderRequest): OrderApiResponse
 }
 
 object OrderApiClient {

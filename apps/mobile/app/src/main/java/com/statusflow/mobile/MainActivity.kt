@@ -8,20 +8,26 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -32,6 +38,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.statusflow.mobile.data.MobileOrderSummary
+import com.statusflow.mobile.data.MobileUserSummary
 import com.statusflow.mobile.data.StatusFlowApiRepository
 import com.statusflow.mobile.ui.theme.StatusFlowTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,9 +61,12 @@ class MainActivity : ComponentActivity() {
 
 data class MobileHomeUiState(
     val isLoading: Boolean = true,
+    val isSubmitting: Boolean = false,
     val apiBaseUrl: String = BuildConfig.API_BASE_URL,
     val orders: List<MobileOrderSummary> = emptyList(),
-    val errorMessage: String? = null
+    val users: List<MobileUserSummary> = emptyList(),
+    val errorMessage: String? = null,
+    val actionMessage: String? = null
 )
 
 class MobileHomeViewModel(
@@ -71,14 +81,19 @@ class MobileHomeViewModel(
 
     fun refresh() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                errorMessage = null,
+                actionMessage = null
+            )
 
-            runCatching { repository.fetchOrders() }
-                .onSuccess { orders ->
+            runCatching { repository.fetchDashboardData() }
+                .onSuccess { dashboard ->
                     _uiState.value = MobileHomeUiState(
                         isLoading = false,
                         apiBaseUrl = BuildConfig.API_BASE_URL,
-                        orders = orders
+                        orders = dashboard.orders,
+                        users = dashboard.users
                     )
                 }
                 .onFailure { throwable ->
@@ -86,9 +101,52 @@ class MobileHomeViewModel(
                         isLoading = false,
                         apiBaseUrl = BuildConfig.API_BASE_URL,
                         orders = emptyList(),
+                        users = emptyList(),
                         errorMessage = throwable.message ?: "Unknown network error."
                     )
                 }
+        }
+    }
+
+    fun createOrder(title: String, description: String) {
+        val customer = uiState.value.users.firstOrNull { user -> user.role == "customer" }
+
+        if (customer == null) {
+            _uiState.value = _uiState.value.copy(
+                actionMessage = "Customer seed user is missing."
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isSubmitting = true,
+                actionMessage = null,
+                errorMessage = null
+            )
+
+            runCatching {
+                repository.createOrder(
+                    title = title,
+                    description = description,
+                    customerId = customer.id
+                )
+                repository.fetchDashboardData()
+            }.onSuccess { dashboard ->
+                _uiState.value = MobileHomeUiState(
+                    isLoading = false,
+                    isSubmitting = false,
+                    apiBaseUrl = BuildConfig.API_BASE_URL,
+                    orders = dashboard.orders,
+                    users = dashboard.users,
+                    actionMessage = "Order created successfully."
+                )
+            }.onFailure { throwable ->
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    actionMessage = throwable.message ?: "Order creation failed."
+                )
+            }
         }
     }
 }
@@ -102,11 +160,22 @@ fun MobileHomeRoute() {
         }
     )
     val state by viewModel.uiState.collectAsState()
-    MobileHomeScreen(state = state)
+    MobileHomeScreen(
+        state = state,
+        onRefresh = viewModel::refresh,
+        onCreateOrder = viewModel::createOrder
+    )
 }
 
 @Composable
-fun MobileHomeScreen(state: MobileHomeUiState) {
+fun MobileHomeScreen(
+    state: MobileHomeUiState,
+    onRefresh: () -> Unit,
+    onCreateOrder: (String, String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+
     Scaffold { padding ->
         Box(
             modifier = Modifier
@@ -131,7 +200,7 @@ fun MobileHomeScreen(state: MobileHomeUiState) {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Mobile client connected to the shared API. This screen now reflects the same order feed as the operator dashboard.",
+                    text = "Mobile client connected to the shared API. Create new orders here, then watch them show up in the operator dashboard.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color(0xFFD2DAE6)
                 )
@@ -151,6 +220,60 @@ fun MobileHomeScreen(state: MobileHomeUiState) {
                             color = Color.White
                         )
                     }
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Create order",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White
+                        )
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            label = { Text("Title") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = description,
+                            onValueChange = { description = it },
+                            label = { Text("Description") },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(
+                                enabled = !state.isSubmitting && title.length >= 3,
+                                onClick = {
+                                    onCreateOrder(title.trim(), description.trim())
+                                    title = ""
+                                    description = ""
+                                }
+                            ) {
+                                Text(if (state.isSubmitting) "Submitting..." else "Create")
+                            }
+                            Button(
+                                enabled = !state.isLoading && !state.isSubmitting,
+                                onClick = onRefresh
+                            ) {
+                                Text("Refresh")
+                            }
+                        }
+                    }
+                }
+
+                if (state.actionMessage != null) {
+                    StatusMessageCard(
+                        title = "Latest action",
+                        body = state.actionMessage
+                    )
                 }
 
                 when {
