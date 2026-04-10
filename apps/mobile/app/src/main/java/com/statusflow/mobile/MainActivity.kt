@@ -272,6 +272,7 @@ fun MobileHomeScreen(
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var commentBody by remember { mutableStateOf("") }
+    var isShowingDetail by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var sortOptionName by rememberSaveable { mutableStateOf(MobileOrderSortOption.UPDATED_DESC.name) }
@@ -346,31 +347,43 @@ fun MobileHomeScreen(
                         state.isLoading -> item { StatusMessageCard("Syncing orders", "Fetching the latest order list from the API.") }
                         state.errorMessage != null -> item { StatusMessageCard("Sync failed", state.errorMessage) }
                         else -> {
-                            item {
-                                DetailCard(
-                                    detail = state.selectedOrderDetail,
-                                    allowedTransitions = state.selectedOrderDetail?.let { state.allowedTransitions[it.rawStatus].orEmpty() }.orEmpty(),
-                                    isSubmitting = state.isSubmitting,
-                                    commentBody = commentBody,
-                                    onCommentBodyChange = { commentBody = it },
-                                    onTransitionOrder = onTransitionOrder,
-                                    onAddComment = { onAddComment(commentBody.trim()) }
-                                )
-                            }
-                            if (visibleOrders.isEmpty()) {
+                            if (isShowingDetail && state.selectedOrderDetail != null) {
                                 item {
-                                    EmptyQueueCard(
-                                        title = if (state.orders.isEmpty()) "No orders yet" else "No orders match your current view",
-                                        body = if (state.orders.isEmpty()) {
-                                            "Create the first order from this screen or pull down to refresh when the backend receives new work."
-                                        } else {
-                                            "Try clearing the current filter, editing the search text, or changing the sort to inspect a different slice of the queue."
-                                        }
+                                    DetailScreenCard(
+                                        detail = state.selectedOrderDetail,
+                                        allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
+                                        isSubmitting = state.isSubmitting,
+                                        actionMessage = state.actionMessage,
+                                        commentBody = commentBody,
+                                        onCommentBodyChange = { commentBody = it },
+                                        onTransitionOrder = onTransitionOrder,
+                                        onAddComment = { onAddComment(commentBody.trim()) },
+                                        onBack = { isShowingDetail = false }
                                     )
                                 }
                             } else {
-                                items(visibleOrders) { item ->
-                                    OrderCard(order = item, isSelected = state.selectedOrderId == item.id, onSelectOrder = onSelectOrder)
+                                if (visibleOrders.isEmpty()) {
+                                    item {
+                                        EmptyQueueCard(
+                                            title = if (state.orders.isEmpty()) "No orders yet" else "No orders match your current view",
+                                            body = if (state.orders.isEmpty()) {
+                                                "Create the first order from this screen or pull down to refresh when the backend receives new work."
+                                            } else {
+                                                "Try clearing the current filter, editing the search text, or changing the sort to inspect a different slice of the queue."
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    items(visibleOrders) { item ->
+                                        OrderCard(
+                                            order = item,
+                                            isSelected = state.selectedOrderId == item.id,
+                                            onSelectOrder = {
+                                                onSelectOrder(it)
+                                                isShowingDetail = true
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -461,27 +474,30 @@ private fun ListControlsCard(
 }
 
 @Composable
-private fun DetailCard(
-    detail: MobileOrderDetail?,
+private fun DetailScreenCard(
+    detail: MobileOrderDetail,
     allowedTransitions: List<String>,
     isSubmitting: Boolean,
+    actionMessage: String?,
     commentBody: String,
     onCommentBodyChange: (String) -> Unit,
     onTransitionOrder: (String) -> Unit,
-    onAddComment: () -> Unit
+    onAddComment: () -> Unit,
+    onBack: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF1C3456))) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (detail == null) {
-                Text("Order detail", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                Text("Select an order below to inspect its description, comments, and status history.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
-                return@Column
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onBack) { Text("Back to queue") }
             }
             Text("${detail.code} - ${detail.title}", style = MaterialTheme.typography.titleMedium, color = Color.White)
             Text("Customer: ${detail.customerName}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
             Text("Status: ${detail.statusLabel}", style = MaterialTheme.typography.bodyMedium, color = detail.statusColor)
             Text(detail.description, style = MaterialTheme.typography.bodyMedium, color = Color.White)
             Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF92B1F7))
+            if (actionMessage != null) {
+                StatusMessageCard(title = "Latest action", body = actionMessage)
+            }
             Text("Next steps", style = MaterialTheme.typography.titleSmall, color = Color.White)
             if (allowedTransitions.isEmpty()) {
                 Text("This order is already in a terminal state.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
