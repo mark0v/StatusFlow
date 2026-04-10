@@ -3,6 +3,7 @@ package com.statusflow.mobile
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,9 +14,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,9 +37,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -45,6 +51,18 @@ import com.statusflow.mobile.data.MobileOrderDetail
 import com.statusflow.mobile.data.MobileOrderSummary
 import com.statusflow.mobile.data.MobileUserSummary
 import com.statusflow.mobile.data.StatusFlowApiRepository
+import com.statusflow.mobile.ui.theme.Amber300
+import com.statusflow.mobile.ui.theme.Blue300
+import com.statusflow.mobile.ui.theme.Blue400
+import com.statusflow.mobile.ui.theme.Mint400
+import com.statusflow.mobile.ui.theme.Navy500
+import com.statusflow.mobile.ui.theme.Navy600
+import com.statusflow.mobile.ui.theme.Navy700
+import com.statusflow.mobile.ui.theme.Navy900
+import com.statusflow.mobile.ui.theme.Red300
+import com.statusflow.mobile.ui.theme.Slate100
+import com.statusflow.mobile.ui.theme.Slate200
+import com.statusflow.mobile.ui.theme.Slate300
 import com.statusflow.mobile.ui.theme.StatusFlowTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -300,7 +318,11 @@ fun MobileHomeScreen(
     Scaffold { padding ->
         Box(
             modifier = Modifier.fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFF0B1220), Color(0xFF13243E))))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Navy900, Navy700, Navy600)
+                    )
+                )
                 .padding(padding)
         ) {
             PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
@@ -311,6 +333,13 @@ fun MobileHomeScreen(
                 ) {
                     item { ScreenTitle() }
                     item { ApiCard(state.apiBaseUrl) }
+                    item {
+                        QueueOverviewCard(
+                            totalOrders = state.orders.size,
+                            visibleOrders = visibleOrders.size,
+                            selectedOrderCode = state.selectedOrderDetail?.code
+                        )
+                    }
                     item {
                         CreateOrderCard(
                             title = title,
@@ -397,21 +426,82 @@ fun MobileHomeScreen(
 @Composable
 private fun ScreenTitle() {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("StatusFlow", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
         Text(
-            "Mobile client connected to the shared API. Create new orders here, inspect a selected order, and move it through the same workflow used by the web dashboard.",
+            "MOBILE OPS",
+            style = MaterialTheme.typography.labelLarge,
+            color = Blue300,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            "StatusFlow",
+            style = MaterialTheme.typography.headlineLarge,
+            color = Color.White,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "A calm queue-first workspace for creating orders, triaging what matters, and moving jobs forward from the same shared workflow as the web console.",
             style = MaterialTheme.typography.bodyLarge,
-            color = Color(0xFFD2DAE6)
+            color = Slate200
         )
     }
 }
 
 @Composable
 private fun ApiCard(apiBaseUrl: String) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
+    ShellCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Current API", style = MaterialTheme.typography.labelMedium, color = Color(0xFF92B1F7))
+            Text("Connected backend", style = MaterialTheme.typography.labelMedium, color = Blue300)
             Text(apiBaseUrl, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+            Text(
+                "Pull to refresh anytime. Queue state, comments, and transitions stay aligned with the API contract.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Slate300
+            )
+        }
+    }
+}
+
+@Composable
+private fun QueueOverviewCard(totalOrders: Int, visibleOrders: Int, selectedOrderCode: String?) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Navy500),
+        shape = RoundedCornerShape(28.dp),
+        border = BorderStroke(1.dp, Blue300.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Queue snapshot", style = MaterialTheme.typography.labelLarge, color = Mint400, fontWeight = FontWeight.SemiBold)
+                Text("Keep the active workload visible before diving into details.", style = MaterialTheme.typography.bodyMedium, color = Slate100)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                MetricTile(
+                    label = "Total",
+                    value = totalOrders.toString(),
+                    accent = Blue400,
+                    modifier = Modifier.weight(1f)
+                )
+                MetricTile(
+                    label = "Visible",
+                    value = visibleOrders.toString(),
+                    accent = Mint400,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.9f)),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Focus order", style = MaterialTheme.typography.labelMedium, color = Slate300)
+                    Text(selectedOrderCode ?: "No order selected", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+            }
         }
     }
 }
@@ -427,14 +517,53 @@ private fun CreateOrderCard(
     onCreate: () -> Unit,
     onRefresh: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
+    ShellCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Create order", style = MaterialTheme.typography.titleMedium, color = Color.White)
-            OutlinedTextField(value = title, onValueChange = onTitleChange, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = description, onValueChange = onDescriptionChange, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(enabled = !isSubmitting && title.length >= 3, onClick = onCreate) { Text(if (isSubmitting) "Submitting..." else "Create") }
-                Button(enabled = !isLoading && !isSubmitting, onClick = onRefresh) { Text("Refresh") }
+            SectionLabel(title = "Create order", subtitle = "Capture new work without leaving the queue.")
+            OutlinedTextField(
+                value = title,
+                onValueChange = onTitleChange,
+                label = { Text("Order title") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = description,
+                onValueChange = onDescriptionChange,
+                label = { Text("Operator brief") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    enabled = !isSubmitting && title.length >= 3,
+                    onClick = onCreate,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Blue400,
+                        contentColor = Navy900,
+                        disabledContainerColor = Navy600,
+                        disabledContentColor = Slate300
+                    ),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(if (isSubmitting) "Submitting..." else "Create")
+                }
+                Button(
+                    enabled = !isLoading && !isSubmitting,
+                    onClick = onRefresh,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Slate300.copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Navy700,
+                        contentColor = Slate100,
+                        disabledContainerColor = Navy600,
+                        disabledContentColor = Slate300
+                    ),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Refresh")
+                }
             }
         }
     }
@@ -450,23 +579,54 @@ private fun ListControlsCard(
     onSelectStatus: (String) -> Unit,
     onToggleSort: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
+    ShellCard {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Queue controls", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            SectionLabel(title = "Queue controls", subtitle = "Slice the queue fast when volume rises.")
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchQueryChange,
-                label = { Text("Search orders") },
-                modifier = Modifier.fillMaxWidth()
+                label = { Text("Search code, title, or customer") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
             )
-            Text("Sort: ${sortOptionLabel(sortOption)}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onToggleSort) { Text("Change sort") }
-                if (selectedStatus != null) Button(onClick = { onSelectStatus(selectedStatus) }) { Text("Clear filter") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Sort", style = MaterialTheme.typography.labelMedium, color = Slate300)
+                Text(sortOptionLabel(sortOption), style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                PillButton(
+                    label = "Cycle sort",
+                    onClick = onToggleSort,
+                    accent = Blue400,
+                    modifier = Modifier.weight(1f)
+                )
+                if (selectedStatus != null) {
+                    PillButton(
+                        label = "Clear filter",
+                        onClick = { onSelectStatus(selectedStatus) },
+                        accent = Slate200,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
             if (availableStatuses.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    availableStatuses.forEach { status -> Button(onClick = { onSelectStatus(status) }) { Text(statusLabel(status)) } }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Status filter", style = MaterialTheme.typography.labelMedium, color = Slate300)
+                    availableStatuses.forEach { status ->
+                        val active = selectedStatus == status
+                        Button(
+                            onClick = { onSelectStatus(status) },
+                            shape = RoundedCornerShape(18.dp),
+                            border = BorderStroke(1.dp, if (active) Blue300 else Slate300.copy(alpha = 0.3f)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (active) Blue400.copy(alpha = 0.22f) else Navy700,
+                                contentColor = if (active) Color.White else Slate100
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(statusLabel(status), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
                 }
             }
         }
@@ -485,42 +645,84 @@ private fun DetailScreenCard(
     onAddComment: () -> Unit,
     onBack: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF1C3456))) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Navy500),
+        shape = RoundedCornerShape(28.dp),
+        border = BorderStroke(1.dp, Blue300.copy(alpha = 0.28f))
+    ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onBack) { Text("Back to queue") }
+            Button(
+                onClick = onBack,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100)
+            ) {
+                Text("Back to queue")
             }
-            Text("${detail.code} - ${detail.title}", style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Text("Customer: ${detail.customerName}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
-            Text("Status: ${detail.statusLabel}", style = MaterialTheme.typography.bodyMedium, color = detail.statusColor)
-            Text(detail.description, style = MaterialTheme.typography.bodyMedium, color = Color.White)
-            Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF92B1F7))
+            Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+            Text(detail.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
+                Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
+            }
+            Text("Customer ${detail.customerName}", style = MaterialTheme.typography.bodyMedium, color = Slate200)
+            Text(detail.description, style = MaterialTheme.typography.bodyLarge, color = Color.White)
             if (actionMessage != null) {
                 StatusMessageCard(title = "Latest action", body = actionMessage)
             }
-            Text("Next steps", style = MaterialTheme.typography.titleSmall, color = Color.White)
+            SectionLabel(title = "Next steps", subtitle = "Move the order through the allowed lifecycle only.")
             if (allowedTransitions.isEmpty()) {
-                Text("This order is already in a terminal state.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
+                Text("This order is already in a terminal state.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     allowedTransitions.forEach { status ->
-                        Button(enabled = !isSubmitting, onClick = { onTransitionOrder(status) }) { Text(statusLabel(status)) }
+                        Button(
+                            enabled = !isSubmitting,
+                            onClick = { onTransitionOrder(status) },
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Blue400,
+                                contentColor = Navy900,
+                                disabledContainerColor = Navy600,
+                                disabledContentColor = Slate300
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(statusLabel(status))
+                        }
                     }
                 }
             }
-            Text("History", style = MaterialTheme.typography.titleSmall, color = Color.White)
+            SectionLabel(title = "History", subtitle = "Most recent workflow events.")
             detail.history.takeLast(4).reversed().forEach { event ->
-                TimelineEntry(event.summary, "${event.actorName} - ${event.changedAtLabel}", event.reason)
+                TimelineEntry(event.summary, "${event.actorName} | ${event.changedAtLabel}", event.reason)
             }
-            Text("Comments", style = MaterialTheme.typography.titleSmall, color = Color.White)
-            OutlinedTextField(value = commentBody, onValueChange = onCommentBodyChange, label = { Text("Add operator note") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = !isSubmitting && commentBody.trim().isNotEmpty(), onClick = onAddComment) {
+            SectionLabel(title = "Comments", subtitle = "Leave a note for the next operator.")
+            OutlinedTextField(
+                value = commentBody,
+                onValueChange = onCommentBodyChange,
+                label = { Text("Add operator note") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 2
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
+                    onClick = onAddComment,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Mint400,
+                        contentColor = Navy900,
+                        disabledContainerColor = Navy600,
+                        disabledContentColor = Slate300
+                    ),
+                    modifier = Modifier.weight(1f)
+                ) {
                     Text(if (isSubmitting) "Sending..." else "Post comment")
                 }
             }
             if (detail.comments.isEmpty()) {
-                Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
+                Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
             } else {
                 detail.comments.reversed().forEach { comment ->
                     TimelineEntry(comment.authorName, comment.createdAtLabel, comment.body)
@@ -532,10 +734,10 @@ private fun DetailScreenCard(
 
 @Composable
 private fun EmptyQueueCard(title: String, body: String) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Text(body, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
+    ShellCard {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text(body, style = MaterialTheme.typography.bodyLarge, color = Slate200)
         }
     }
 }
@@ -544,37 +746,114 @@ private fun EmptyQueueCard(title: String, body: String) {
 private fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectOrder: (String) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onSelectOrder(order.id) },
-        colors = CardDefaults.cardColors(containerColor = if (isSelected) Color(0xFF23406A) else Color(0xFF172A45))
+        colors = CardDefaults.cardColors(containerColor = if (isSelected) Navy500 else Navy700),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, if (isSelected) Blue300.copy(alpha = 0.55f) else Slate300.copy(alpha = 0.18f))
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(order.code, style = MaterialTheme.typography.labelMedium, color = Color(0xFF92B1F7))
-            Text(order.title, style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Text("Customer: ${order.customerName}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
-            Text("Status: ${order.statusLabel}", style = MaterialTheme.typography.bodyMedium, color = order.statusColor)
-            Text("Updated ${order.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF92B1F7))
-            if (isSelected) Text("Selected for detail view", style = MaterialTheme.typography.bodySmall, color = Color.White)
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                StatusBadge(label = order.statusLabel, accent = order.statusColor)
+            }
+            Text(order.title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
+            Text("Customer ${order.customerName}", style = MaterialTheme.typography.bodyMedium, color = Slate200)
+            Text("Updated ${order.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate300)
+            if (isSelected) {
+                Text("Selected for detail view", style = MaterialTheme.typography.bodySmall, color = Mint400, fontWeight = FontWeight.Medium)
+            }
         }
     }
 }
 
 @Composable
 private fun TimelineEntry(title: String, meta: String, body: String) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF13243E))) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.92f)),
+        shape = RoundedCornerShape(20.dp)
+    ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = Color.White, fontWeight = FontWeight.Medium)
-            Text(meta, style = MaterialTheme.typography.bodySmall, color = Color(0xFF92B1F7))
-            Text(body, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
+            Text(meta, style = MaterialTheme.typography.bodySmall, color = Blue300)
+            Text(body, style = MaterialTheme.typography.bodyMedium, color = Slate200)
         }
     }
 }
 
 @Composable
 private fun StatusMessageCard(title: String, body: String) {
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Navy700),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, Mint400.copy(alpha = 0.25f))
+    ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Text(body, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Mint400, fontWeight = FontWeight.SemiBold)
+            Text(body, style = MaterialTheme.typography.bodyMedium, color = Slate100)
         }
+    }
+}
+
+@Composable
+private fun ShellCard(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.96f)),
+        shape = RoundedCornerShape(26.dp),
+        border = BorderStroke(1.dp, Slate300.copy(alpha = 0.18f))
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun SectionLabel(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Slate300)
+    }
+}
+
+@Composable
+private fun MetricTile(label: String, value: String, accent: Color, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.82f)),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = Slate300)
+            Text(value, style = MaterialTheme.typography.headlineSmall, color = accent, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun PillButton(label: String, onClick: () -> Unit, accent: Color, modifier: Modifier = Modifier) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.28f)),
+        colors = ButtonDefaults.buttonColors(containerColor = Navy600, contentColor = Slate100)
+    ) {
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun StatusBadge(label: String, accent: Color) {
+    Box(
+        modifier = Modifier
+            .background(accent.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = accent, fontWeight = FontWeight.SemiBold)
     }
 }
 
