@@ -11,6 +11,7 @@ data class MobileOrderSummary(
     val code: String,
     val title: String,
     val customerName: String,
+    val rawStatus: String,
     val statusLabel: String,
     val statusColor: Color,
     val updatedAtLabel: String
@@ -24,7 +25,37 @@ data class MobileUserSummary(
 
 data class MobileDashboardData(
     val orders: List<MobileOrderSummary>,
-    val users: List<MobileUserSummary>
+    val users: List<MobileUserSummary>,
+    val allowedTransitions: Map<String, List<String>>
+)
+
+data class MobileOrderComment(
+    val id: String,
+    val body: String,
+    val authorName: String,
+    val createdAtLabel: String
+)
+
+data class MobileOrderHistoryEvent(
+    val id: String,
+    val summary: String,
+    val reason: String,
+    val actorName: String,
+    val changedAtLabel: String
+)
+
+data class MobileOrderDetail(
+    val id: String,
+    val code: String,
+    val title: String,
+    val description: String,
+    val customerName: String,
+    val rawStatus: String,
+    val statusLabel: String,
+    val statusColor: Color,
+    val updatedAtLabel: String,
+    val comments: List<MobileOrderComment>,
+    val history: List<MobileOrderHistoryEvent>
 )
 
 class StatusFlowApiRepository(
@@ -33,6 +64,7 @@ class StatusFlowApiRepository(
     suspend fun fetchDashboardData(): MobileDashboardData {
         val users = apiService.listUsers()
         val orders = apiService.listOrders()
+        val lifecycle = apiService.getOrderStatusLifecycle()
 
         return MobileDashboardData(
             orders = orders.map(::mapOrder),
@@ -42,7 +74,8 @@ class StatusFlowApiRepository(
                     name = user.name,
                     role = user.role
                 )
-            }
+            },
+            allowedTransitions = lifecycle.allowed_transitions
         )
     }
 
@@ -56,16 +89,71 @@ class StatusFlowApiRepository(
         )
     }
 
+    suspend fun fetchOrderDetail(orderId: String): MobileOrderDetail {
+        return mapOrderDetail(apiService.getOrder(orderId))
+    }
+
+    suspend fun transitionOrderStatus(orderId: String, changedById: String, toStatus: String) {
+        apiService.transitionOrderStatus(
+            orderId = orderId,
+            payload = TransitionOrderStatusRequest(
+                changed_by_id = changedById,
+                to_status = toStatus,
+                reason = "Operator moved order to ${statusLabel(toStatus)}."
+            )
+        )
+    }
+
     private fun mapOrder(response: OrderApiResponse): MobileOrderSummary {
         return MobileOrderSummary(
             id = response.id,
             code = response.code,
             title = response.title,
             customerName = response.customer_name,
+            rawStatus = response.status,
             statusLabel = statusLabel(response.status),
             statusColor = statusColor(response.status),
             updatedAtLabel = formatTimestamp(response.updated_at)
         )
+    }
+
+    private fun mapOrderDetail(response: OrderDetailApiResponse): MobileOrderDetail {
+        return MobileOrderDetail(
+            id = response.id,
+            code = response.code,
+            title = response.title,
+            description = response.description.ifBlank { "No description provided yet." },
+            customerName = response.customer_name,
+            rawStatus = response.status,
+            statusLabel = statusLabel(response.status),
+            statusColor = statusColor(response.status),
+            updatedAtLabel = formatTimestamp(response.updated_at),
+            comments = response.comments.map { comment ->
+                MobileOrderComment(
+                    id = comment.id,
+                    body = comment.body,
+                    authorName = comment.author.name,
+                    createdAtLabel = formatTimestamp(comment.created_at)
+                )
+            },
+            history = response.history.map { event ->
+                MobileOrderHistoryEvent(
+                    id = event.id,
+                    summary = buildHistorySummary(event.from_status, event.to_status),
+                    reason = event.reason.ifBlank { "No reason provided." },
+                    actorName = event.changed_by.name,
+                    changedAtLabel = formatTimestamp(event.changed_at)
+                )
+            }
+        )
+    }
+
+    private fun buildHistorySummary(fromStatus: String?, toStatus: String): String {
+        return if (fromStatus == null) {
+            "Created in ${statusLabel(toStatus)}"
+        } else {
+            "${statusLabel(fromStatus)} -> ${statusLabel(toStatus)}"
+        }
     }
 
     private fun statusLabel(status: String): String {
