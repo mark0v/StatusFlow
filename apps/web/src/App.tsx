@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type OrderStatus =
   | "new"
@@ -15,6 +15,23 @@ type OrderCard = {
   customer_name: string;
   status: OrderStatus;
   updated_at: string;
+};
+
+type UserSummary = {
+  id: string;
+  email: string;
+  name: string;
+  role: "customer" | "operator";
+};
+
+type OrderStatusLifecycle = {
+  statuses: OrderStatus[];
+  allowed_transitions: Record<OrderStatus, OrderStatus[]>;
+};
+
+type CreateOrderFormState = {
+  title: string;
+  description: string;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -66,29 +83,59 @@ const sortStatuses = (entries: [OrderStatus, number][]) => {
   return entries.sort((left, right) => order.indexOf(left[0]) - order.indexOf(right[0]));
 };
 
+async function readJson<T>(path: string, init?: RequestInit) {
+  const response = await fetch(`${API_BASE_URL}${path}`, init);
+
+  if (!response.ok) {
+    throw new Error(`API returned ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
 export default function App() {
   const [orders, setOrders] = useState<OrderCard[]>([]);
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [lifecycle, setLifecycle] = useState<OrderStatusLifecycle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [formState, setFormState] = useState<CreateOrderFormState>({
+    title: "",
+    description: ""
+  });
+
+  async function loadDashboardData(signal?: AbortSignal) {
+    const [ordersPayload, usersPayload, lifecyclePayload] = await Promise.all([
+      fetch(`${API_BASE_URL}/orders`, { signal }),
+      fetch(`${API_BASE_URL}/users`, { signal }),
+      fetch(`${API_BASE_URL}/order-status-lifecycle`, { signal })
+    ]);
+
+    if (!ordersPayload.ok || !usersPayload.ok || !lifecyclePayload.ok) {
+      throw new Error("Failed to load dashboard dependencies from the API.");
+    }
+
+    const [ordersJson, usersJson, lifecycleJson] = await Promise.all([
+      ordersPayload.json() as Promise<OrderCard[]>,
+      usersPayload.json() as Promise<UserSummary[]>,
+      lifecyclePayload.json() as Promise<OrderStatusLifecycle>
+    ]);
+
+    setOrders(ordersJson);
+    setUsers(usersJson);
+    setLifecycle(lifecycleJson);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
 
-    async function loadOrders() {
+    async function bootstrap() {
       try {
         setIsLoading(true);
         setError(null);
-
-        const response = await fetch(`${API_BASE_URL}/orders`, {
-          signal: controller.signal
-        });
-
-        if (!response.ok) {
-          throw new Error(`API returned ${response.status}`);
-        }
-
-        const payload = (await response.json()) as OrderCard[];
-        setOrders(payload);
+        await loadDashboardData(controller.signal);
       } catch (fetchError) {
         if (controller.signal.aborted) {
           return;
@@ -97,7 +144,7 @@ export default function App() {
         const message =
           fetchError instanceof Error
             ? fetchError.message
-            : "Unknown error while loading orders.";
+            : "Unknown error while loading dashboard data.";
         setError(message);
       } finally {
         if (!controller.signal.aborted) {
@@ -106,7 +153,7 @@ export default function App() {
       }
     }
 
-    loadOrders();
+    bootstrap();
 
     return () => controller.abort();
   }, []);
@@ -120,15 +167,95 @@ export default function App() {
     ) as [OrderStatus, number][]
   );
 
+  const customer = useMemo(
+    () => users.find((user) => user.role === "customer") ?? null,
+    [users]
+  );
+  const operator = useMemo(
+    () => users.find((user) => user.role === "operator") ?? null,
+    [users]
+  );
+
+  async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!customer) {
+      setActionError("Customer seed user is missing.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setActionError(null);
+
+      await readJson("/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: formState.title,
+          description: formState.description,
+          customer_id: customer.id
+        })
+      });
+
+      setFormState({ title: "", description: "" });
+      await loadDashboardData();
+    } catch (submitError) {
+      setActionError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Order creation failed."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleTransition(orderId: string, toStatus: OrderStatus) {
+    if (!operator) {
+      setActionError("Operator seed user is missing.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setActionError(null);
+
+      await readJson(`/orders/${orderId}/status-transitions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          changed_by_id: operator.id,
+          to_status: toStatus,
+          reason: `Operator moved order to ${statusLabels[toStatus]}.`
+        })
+      });
+
+      await loadDashboardData();
+    } catch (submitError) {
+      setActionError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Status transition failed."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <main className="shell">
       <section className="hero">
         <p className="eyebrow">Operator Workspace</p>
         <h1>StatusFlow control tower</h1>
         <p className="lead">
-          Live operator dashboard backed by the shared workflow API. Use it to
-          inspect seeded orders, validate lifecycle rules, and confirm what the
-          mobile client should eventually sync.
+          Live operator dashboard backed by the shared workflow API. Create new
+          orders, review the current queue, and move orders through the allowed
+          status lifecycle from one place.
         </p>
 
         <div className="hero-grid">
@@ -137,8 +264,10 @@ export default function App() {
             <strong>{isLoading ? "Loading..." : `${orders.length} tracked orders`}</strong>
           </article>
           <article className="hero-card">
-            <span>Current backend</span>
-            <strong>FastAPI + SQLAlchemy + PostgreSQL</strong>
+            <span>Seed actors</span>
+            <strong>
+              {users.length === 0 ? "Loading users..." : `${users.length} shared users`}
+            </strong>
           </article>
           <article className="hero-card">
             <span>Live endpoint</span>
@@ -150,13 +279,54 @@ export default function App() {
       <section className="panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Starter Queue</p>
-            <h2>Tracked orders</h2>
+            <p className="eyebrow">Operator Actions</p>
+            <h2>Create order and steer workflow</h2>
           </div>
           <a className="api-link" href={`${API_BASE_URL}/docs`}>
             Open API docs
           </a>
         </div>
+
+        <form className="create-form" onSubmit={handleCreateOrder}>
+          <label className="field">
+            <span>Order title</span>
+            <input
+              required
+              minLength={3}
+              value={formState.title}
+              onChange={(event) =>
+                setFormState((current) => ({ ...current, title: event.target.value }))
+              }
+              placeholder="Inspect delivery damage"
+            />
+          </label>
+
+          <label className="field field-wide">
+            <span>Description</span>
+            <textarea
+              value={formState.description}
+              onChange={(event) =>
+                setFormState((current) => ({
+                  ...current,
+                  description: event.target.value
+                }))
+              }
+              placeholder="Add context that the operator and mobile app should both see."
+              rows={3}
+            />
+          </label>
+
+          <button className="primary-action" disabled={isSubmitting || !customer} type="submit">
+            {isSubmitting ? "Submitting..." : "Create order"}
+          </button>
+        </form>
+
+        {actionError ? (
+          <div className="state-error compact">
+            <strong>Action failed.</strong>
+            <p>{actionError}</p>
+          </div>
+        ) : null}
 
         <div className="status-overview">
           {groupedStatuses.map(([status, count]) => (
@@ -177,23 +347,45 @@ export default function App() {
 
         {!isLoading && !error ? (
           <div className="orders">
-            {orders.map((order) => (
-              <article className="order-card" key={order.id}>
-                <div>
-                  <p className="order-code">{order.code}</p>
-                  <h3>{order.title}</h3>
-                </div>
+            {orders.map((order) => {
+              const nextStatuses = lifecycle?.allowed_transitions[order.status] ?? [];
 
-                <p className="customer-label">Customer</p>
-                <p className="customer-name">{order.customer_name}</p>
+              return (
+                <article className="order-card" key={order.id}>
+                  <div>
+                    <p className="order-code">{order.code}</p>
+                    <h3>{order.title}</h3>
+                  </div>
 
-                <span className={`pill ${statusTone(order.status)}`}>
-                  {statusLabels[order.status]}
-                </span>
+                  <p className="customer-label">Customer</p>
+                  <p className="customer-name">{order.customer_name}</p>
 
-                <p className="updated">Updated {formatTimestamp(order.updated_at)}</p>
-              </article>
-            ))}
+                  <span className={`pill ${statusTone(order.status)}`}>
+                    {statusLabels[order.status]}
+                  </span>
+
+                  <div className="transition-row">
+                    {nextStatuses.length === 0 ? (
+                      <span className="transition-terminal">Terminal state</span>
+                    ) : (
+                      nextStatuses.map((status) => (
+                        <button
+                          key={status}
+                          className="transition-button"
+                          disabled={isSubmitting}
+                          onClick={() => handleTransition(order.id, status)}
+                          type="button"
+                        >
+                          Move to {statusLabels[status]}
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  <p className="updated">Updated {formatTimestamp(order.updated_at)}</p>
+                </article>
+              );
+            })}
           </div>
         ) : null}
       </section>
