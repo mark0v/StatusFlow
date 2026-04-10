@@ -1,6 +1,14 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const uniqueSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+async function signIn(page: Page) {
+  await page.goto("/");
+  await page.getByLabel("Email").fill("operator@example.com");
+  await page.getByLabel("Password").fill("operator123");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByText("Operate the live workflow")).toBeVisible();
+}
 
 test.describe("StatusFlow operator console", () => {
   test("exposes browser branding metadata", async ({ page }) => {
@@ -18,7 +26,7 @@ test.describe("StatusFlow operator console", () => {
   });
 
   test("renders static status summary cards", async ({ page }) => {
-    await page.goto("/");
+    await signIn(page);
 
     await expect(page.getByAltText("StatusFlow operator console")).toBeVisible();
     await expect(page.getByText("Cancelled").locator("..")).toContainText("0");
@@ -28,7 +36,7 @@ test.describe("StatusFlow operator console", () => {
   });
 
   test("closes the status filter when clicking outside", async ({ page }) => {
-    await page.goto("/");
+    await signIn(page);
 
     const filterButton = page.getByRole("button", { name: "Filter" });
     await filterButton.click();
@@ -41,7 +49,7 @@ test.describe("StatusFlow operator console", () => {
   test("creates an order and transitions it to in review", async ({ page }) => {
     const orderTitle = `E2E order ${uniqueSuffix()}`;
 
-    await page.goto("/");
+    await signIn(page);
 
     await page.getByRole("button", { name: "Create order" }).click();
     await page.getByLabel("Order title").fill(orderTitle);
@@ -61,7 +69,7 @@ test.describe("StatusFlow operator console", () => {
   });
 
   test("closes row status actions when clicking outside", async ({ page }) => {
-    await page.goto("/");
+    await signIn(page);
 
     const firstRow = page.locator("tbody tr").first();
     await firstRow.getByRole("button", { name: "Change status" }).click();

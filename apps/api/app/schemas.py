@@ -20,6 +20,18 @@ class UserSummary(BaseModel):
     role: UserRole
 
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8, max_length=200)
+
+
+class AuthSessionResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in_seconds: int
+    user: UserSummary
+
+
 class OrderCommentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

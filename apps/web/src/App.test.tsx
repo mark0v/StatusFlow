@@ -27,6 +27,13 @@ type User = {
   role: "customer" | "operator";
 };
 
+type AuthSession = {
+  access_token: string;
+  token_type: "bearer";
+  expires_in_seconds: number;
+  user: User;
+};
+
 type Lifecycle = {
   statuses: OrderStatus[];
   allowed_transitions: Record<OrderStatus, OrderStatus[]>;
@@ -97,11 +104,36 @@ function jsonResponse(payload: unknown, init?: ResponseInit) {
 function installFetchMock(initialOrders = baseOrders()) {
   let orders = [...initialOrders];
   let orderCounter = 1000 + orders.length;
+  const session: AuthSession = {
+    access_token: "test-token",
+    token_type: "bearer",
+    expires_in_seconds: 43200,
+    user: users[1]
+  };
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const requestUrl = typeof input === "string" ? input : input.toString();
     const path = requestUrl.replace("http://localhost:8000", "");
     const method = init?.method ?? "GET";
+    const headers = new Headers(init?.headers);
+    const isAuthed = headers.get("Authorization") === `Bearer ${session.access_token}`;
+
+    if (path === "/auth/login" && method === "POST") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        email: string;
+        password: string;
+      };
+
+      if (body.email === "operator@example.com" && body.password === "operator123") {
+        return jsonResponse(session);
+      }
+
+      return jsonResponse({ detail: "Invalid email or password." }, { status: 401 });
+    }
+
+    if (!isAuthed) {
+      return jsonResponse({ detail: "Authentication required." }, { status: 401 });
+    }
 
     if (path === "/orders" && method === "GET") {
       return jsonResponse(orders);
@@ -184,16 +216,29 @@ function getStatusCard(label: string) {
 describe("App", () => {
   beforeEach(() => {
     installFetchMock();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    window.localStorage.clear();
   });
 
-  it("renders all status counters, including zero-value statuses", async () => {
+  async function signIn(user = userEvent.setup()) {
     render(<App />);
 
+    await user.clear(screen.getByLabelText("Email"));
+    await user.type(screen.getByLabelText("Email"), "operator@example.com");
+    await user.clear(screen.getByLabelText("Password"));
+    await user.type(screen.getByLabelText("Password"), "operator123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
     await screen.findByText("Replace display unit");
+
+    return user;
+  }
+
+  it("renders all status counters, including zero-value statuses", async () => {
+    await signIn();
 
     expect(within(getStatusCard("New")).getByText("1")).toBeInTheDocument();
     expect(within(getStatusCard("In review")).getByText("1")).toBeInTheDocument();
@@ -204,10 +249,7 @@ describe("App", () => {
   });
 
   it("opens and closes the status filter dropdown on outside click", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await screen.findByText("Replace display unit");
+    const user = await signIn();
 
     await user.click(screen.getByRole("button", { name: "Filter" }));
     expect(screen.getByLabelText("Cancelled")).toBeInTheDocument();
@@ -220,10 +262,7 @@ describe("App", () => {
   });
 
   it("creates a new order from the reveal form", async () => {
-    const user = userEvent.setup();
-    render(<App />);
-
-    await screen.findByText("Replace display unit");
+    const user = await signIn();
 
     await user.click(screen.getByRole("button", { name: "Create order" }));
     await user.type(screen.getByLabelText("Order title"), "Inspect return shipment");
@@ -238,8 +277,7 @@ describe("App", () => {
   });
 
   it("opens and closes row status actions, then updates the visible status", async () => {
-    const user = userEvent.setup();
-    render(<App />);
+    const user = await signIn();
 
     const rowTitle = await screen.findByText("Replace display unit");
     const row = rowTitle.closest("tr");

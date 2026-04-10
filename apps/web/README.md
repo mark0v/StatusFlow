@@ -20,7 +20,12 @@ The dashboard now reads real order data from the API.
 
 - default API base URL: `http://localhost:8000`
 - override with `VITE_API_BASE_URL`
+- operator sign-in now gates the console via bearer auth
 - supports live order creation and valid status transitions from the operator UI
+
+## Seed credentials
+
+- operator: `operator@example.com` / `operator123`
 
 ## Tests
 

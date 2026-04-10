@@ -24,9 +24,15 @@ PYTHONPATH=.test-deps;apps/api python -m pytest apps/api/tests -q
 
 ## Current API scope
 
+- `POST /auth/login` issues bearer tokens for seeded users
 - order status lifecycle endpoint
 - seeded users and orders
 - order listing and detail
 - create order
 - add comment
 - transition order status with validation
+
+## Seed credentials
+
+- operator: `operator@example.com` / `operator123`
+- customer: `customer@example.com` / `customer123`

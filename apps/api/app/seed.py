@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import hash_password
 from app.domain import OrderStatus, UserRole
 from app.models import Order, OrderComment, OrderStatusHistory, User
 
@@ -12,11 +13,13 @@ def _seed_users(session: Session) -> dict[str, User]:
 
     customer = User(
         email="customer@example.com",
+        password_hash=hash_password("customer123"),
         name="Alex Morgan",
         role=UserRole.CUSTOMER,
     )
     operator = User(
         email="operator@example.com",
+        password_hash=hash_password("operator123"),
         name="Riley Chen",
         role=UserRole.OPERATOR,
     )
@@ -25,8 +28,24 @@ def _seed_users(session: Session) -> dict[str, User]:
     return {customer.role.value: customer, operator.role.value: operator}
 
 
+def _backfill_password_hashes(session: Session, users: list[User]) -> None:
+    defaults = {
+        UserRole.CUSTOMER: "customer123",
+        UserRole.OPERATOR: "operator123",
+    }
+    updated = False
+    for user in users:
+        if user.password_hash:
+            continue
+        user.password_hash = hash_password(defaults[user.role])
+        updated = True
+    if updated:
+        session.flush()
+
+
 def seed_initial_data(session: Session) -> None:
     users = _seed_users(session)
+    _backfill_password_hashes(session, list(users.values()))
 
     has_orders = session.scalar(select(Order.id).limit(1))
     if has_orders:

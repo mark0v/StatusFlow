@@ -2,7 +2,7 @@ import os
 import time
 from collections.abc import Generator
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -50,3 +50,20 @@ def wait_for_database(max_attempts: int = 20, delay_seconds: float = 1.5) -> Non
             if attempt == max_attempts:
                 raise
             time.sleep(delay_seconds)
+
+
+def ensure_schema_updates() -> None:
+    inspector = inspect(engine)
+
+    if "users" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("users")}
+    if "password_hash" in columns:
+        return
+
+    with engine.begin() as connection:
+        if engine.dialect.name == "sqlite":
+            connection.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''"))
+        else:
+            connection.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''"))

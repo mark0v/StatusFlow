@@ -25,6 +25,13 @@ type UserSummary = {
   role: "customer" | "operator";
 };
 
+type AuthSession = {
+  access_token: string;
+  token_type: "bearer";
+  expires_in_seconds: number;
+  user: UserSummary;
+};
+
 type OrderStatusLifecycle = {
   statuses: OrderStatus[];
   allowed_transitions: Record<OrderStatus, OrderStatus[]>;
@@ -39,6 +46,7 @@ type SortField = "updated_at" | "status" | "customer_name";
 type SortDirection = "asc" | "desc";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const SESSION_STORAGE_KEY = "statusflow.web.session";
 
 const statusLabels: Record<OrderStatus, string> = {
   new: "New",
@@ -83,24 +91,70 @@ const formatTimestamp = (value: string) =>
     timeStyle: "short"
   }).format(new Date(value));
 
-async function readJson<T>(path: string, init?: RequestInit) {
-  const response = await fetch(`${API_BASE_URL}${path}`, init);
+function readStoredSession() {
+  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as AuthSession;
+  } catch {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    return null;
+  }
+}
+
+function persistSession(session: AuthSession | null) {
+  if (session) {
+    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    return;
+  }
+
+  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+async function readJson<T>(path: string, token?: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers ?? {});
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers
+  });
 
   if (!response.ok) {
-    throw new Error(`API returned ${response.status}`);
+    const message =
+      response.status === 401
+        ? "AUTH_REQUIRED"
+        : response.status === 403
+          ? "FORBIDDEN"
+          : `API returned ${response.status}`;
+    throw new Error(message);
   }
 
   return (await response.json()) as T;
 }
 
 export default function App() {
+  const [session, setSession] = useState<AuthSession | null>(() => readStoredSession());
   const [orders, setOrders] = useState<OrderCard[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [lifecycle, setLifecycle] = useState<OrderStatusLifecycle | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(Boolean(session));
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authForm, setAuthForm] = useState({
+    email: "operator@example.com",
+    password: "operator123"
+  });
   const [formState, setFormState] = useState<CreateOrderFormState>({
     title: "",
     description: ""
@@ -112,21 +166,11 @@ export default function App() {
   const [isStatusFilterOpen, setIsStatusFilterOpen] = useState(false);
   const [openActionsOrderId, setOpenActionsOrderId] = useState<string | null>(null);
 
-  async function loadDashboardData(signal?: AbortSignal) {
-    const [ordersPayload, usersPayload, lifecyclePayload] = await Promise.all([
-      fetch(`${API_BASE_URL}/orders`, { signal }),
-      fetch(`${API_BASE_URL}/users`, { signal }),
-      fetch(`${API_BASE_URL}/order-status-lifecycle`, { signal })
-    ]);
-
-    if (!ordersPayload.ok || !usersPayload.ok || !lifecyclePayload.ok) {
-      throw new Error("Failed to load dashboard dependencies from the API.");
-    }
-
+  async function loadDashboardData(accessToken: string, signal?: AbortSignal) {
     const [ordersJson, usersJson, lifecycleJson] = await Promise.all([
-      ordersPayload.json() as Promise<OrderCard[]>,
-      usersPayload.json() as Promise<UserSummary[]>,
-      lifecyclePayload.json() as Promise<OrderStatusLifecycle>
+      readJson<OrderCard[]>("/orders", accessToken, { signal }),
+      readJson<UserSummary[]>("/users", accessToken, { signal }),
+      readJson<OrderStatusLifecycle>("/order-status-lifecycle", accessToken, { signal })
     ]);
 
     setOrders(ordersJson);
@@ -135,15 +179,31 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (!session) {
+      setIsLoading(false);
+      return;
+    }
+
+    const accessToken = session.access_token;
     const controller = new AbortController();
 
     async function bootstrap() {
       try {
         setIsLoading(true);
         setError(null);
-        await loadDashboardData(controller.signal);
+        await loadDashboardData(accessToken, controller.signal);
       } catch (fetchError) {
         if (controller.signal.aborted) {
+          return;
+        }
+
+        if (fetchError instanceof Error && fetchError.message === "AUTH_REQUIRED") {
+          persistSession(null);
+          setSession(null);
+          setOrders([]);
+          setUsers([]);
+          setLifecycle(null);
+          setAuthError("Your session expired. Sign in again.");
           return;
         }
 
@@ -159,10 +219,10 @@ export default function App() {
       }
     }
 
-    bootstrap();
+    void bootstrap();
 
     return () => controller.abort();
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -260,6 +320,48 @@ export default function App() {
     return sortDirection === "asc" ? "▲" : "▼";
   }
 
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      setIsAuthenticating(true);
+      setAuthError(null);
+
+      const nextSession = await readJson<AuthSession>("/auth/login", undefined, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(authForm)
+      });
+
+      persistSession(nextSession);
+      setSession(nextSession);
+    } catch (loginError) {
+      setAuthError(
+        loginError instanceof Error && loginError.message === "AUTH_REQUIRED"
+          ? "Invalid email or password."
+          : loginError instanceof Error
+            ? loginError.message
+            : "Sign-in failed."
+      );
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }
+
+  function handleLogout() {
+    persistSession(null);
+    setSession(null);
+    setOrders([]);
+    setUsers([]);
+    setLifecycle(null);
+    setError(null);
+    setActionError(null);
+    setIsCreateOpen(false);
+    setOpenActionsOrderId(null);
+  }
+
   async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -268,11 +370,16 @@ export default function App() {
       return;
     }
 
+    if (!session) {
+      setActionError("Sign in again to create orders.");
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setActionError(null);
 
-      await readJson("/orders", {
+      await readJson("/orders", session.access_token, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -286,8 +393,14 @@ export default function App() {
 
       setFormState({ title: "", description: "" });
       setIsCreateOpen(false);
-      await loadDashboardData();
+      await loadDashboardData(session.access_token);
     } catch (submitError) {
+      if (submitError instanceof Error && submitError.message === "AUTH_REQUIRED") {
+        handleLogout();
+        setAuthError("Your session expired. Sign in again.");
+        return;
+      }
+
       setActionError(
         submitError instanceof Error
           ? submitError.message
@@ -304,11 +417,16 @@ export default function App() {
       return;
     }
 
+    if (!session) {
+      setActionError("Sign in again to change status.");
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setActionError(null);
 
-      await readJson(`/orders/${orderId}/status-transitions`, {
+      await readJson(`/orders/${orderId}/status-transitions`, session.access_token, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -321,8 +439,14 @@ export default function App() {
       });
 
       setOpenActionsOrderId(null);
-      await loadDashboardData();
+      await loadDashboardData(session.access_token);
     } catch (submitError) {
+      if (submitError instanceof Error && submitError.message === "AUTH_REQUIRED") {
+        handleLogout();
+        setAuthError("Your session expired. Sign in again.");
+        return;
+      }
+
       setActionError(
         submitError instanceof Error
           ? submitError.message
@@ -331,6 +455,88 @@ export default function App() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (!session) {
+    return (
+      <main className="shell shell-auth">
+        <section className="auth-panel">
+          <img
+            alt="StatusFlow operator console"
+            className="hero-logo auth-logo"
+            src={statusFlowLogo}
+          />
+          <p className="eyebrow">Operator sign in</p>
+          <h1>Access the live workflow console</h1>
+          <p className="lead">
+            Sign in with an operator account to review orders, update statuses,
+            and manage the shared queue.
+          </p>
+
+          <form className="auth-form" onSubmit={handleLogin}>
+            <label className="field">
+              <span>Email</span>
+              <input
+                autoComplete="username"
+                value={authForm.email}
+                onChange={(event) =>
+                  setAuthForm((current) => ({ ...current, email: event.target.value }))
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <input
+                autoComplete="current-password"
+                type="password"
+                value={authForm.password}
+                onChange={(event) =>
+                  setAuthForm((current) => ({ ...current, password: event.target.value }))
+                }
+              />
+            </label>
+            <button className="primary-action" disabled={isAuthenticating} type="submit">
+              {isAuthenticating ? "Signing in..." : "Sign in"}
+            </button>
+          </form>
+
+          {authError ? (
+            <div className="feedback-card feedback-error compact">
+              <span className="feedback-eyebrow">Auth</span>
+              <strong>Unable to sign in.</strong>
+              <p>{authError}</p>
+            </div>
+          ) : null}
+
+          <div className="auth-hint">
+            <strong>Seed operator</strong>
+            <span>operator@example.com / operator123</span>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (session.user.role !== "operator") {
+    return (
+      <main className="shell shell-auth">
+        <section className="auth-panel">
+          <img
+            alt="StatusFlow operator console"
+            className="hero-logo auth-logo"
+            src={statusFlowLogo}
+          />
+          <p className="eyebrow">Restricted</p>
+          <h1>Operator access required</h1>
+          <p className="lead">
+            The web console is currently reserved for operator accounts.
+          </p>
+          <button className="primary-action" onClick={handleLogout} type="button">
+            Sign out
+          </button>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -352,10 +558,8 @@ export default function App() {
             <strong>{isLoading ? "Loading..." : `${orders.length} tracked orders`}</strong>
           </article>
           <article className="hero-card">
-            <span>Shared actors</span>
-            <strong>
-              {users.length === 0 ? "Loading users..." : `${users.length} shared users`}
-            </strong>
+            <span>Signed in</span>
+            <strong>{session.user.name} · {session.user.role}</strong>
           </article>
           <article className="hero-card">
             <span>Live endpoint</span>
@@ -370,9 +574,14 @@ export default function App() {
             <p className="eyebrow">Queue Console</p>
             <h2>Operate the live workflow</h2>
           </div>
-          <a className="api-link" href={`${API_BASE_URL}/docs`}>
-            Open API docs
-          </a>
+          <div className="panel-actions">
+            <a className="api-link" href={`${API_BASE_URL}/docs`}>
+              Open API docs
+            </a>
+            <button className="api-link api-link-button" onClick={handleLogout} type="button">
+              Sign out
+            </button>
+          </div>
         </div>
 
         <div className="summary-strip">

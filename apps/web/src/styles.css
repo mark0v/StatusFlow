@@ -36,6 +36,13 @@ a {
   padding: 28px 0 72px;
 }
 
+.shell-auth {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 32px 0;
+}
+
 .hero {
   display: grid;
   gap: 12px;
@@ -60,6 +67,10 @@ a {
   display: block;
   width: min(340px, 100%);
   height: auto;
+}
+
+.auth-logo {
+  width: min(280px, 100%);
 }
 
 .lead {
@@ -180,6 +191,12 @@ a {
   margin-bottom: 12px;
 }
 
+.panel-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .section-heading,
 .table-toolbar {
   display: flex;
@@ -223,6 +240,44 @@ a {
   border-radius: 999px;
   background: rgba(141, 178, 255, 0.12);
   color: #d7e4ff;
+}
+
+.api-link-button {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.auth-panel {
+  width: min(520px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 19, 36, 0.82);
+  backdrop-filter: blur(18px);
+  border-radius: 30px;
+  display: grid;
+  gap: 14px;
+}
+
+.auth-panel h1 {
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 3rem);
+  line-height: 0.98;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-hint {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #b8c5d6;
 }
 
 .status-card {
