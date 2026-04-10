@@ -336,7 +336,6 @@ export default function App() {
   return (
     <main className="shell">
       <section className="hero">
-        <p className="eyebrow">Operator Workspace</p>
         <img
           alt="StatusFlow operator console"
           className="hero-logo"
