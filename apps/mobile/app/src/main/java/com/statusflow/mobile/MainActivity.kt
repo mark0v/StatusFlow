@@ -18,11 +18,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -53,10 +55,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             StatusFlowTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     MobileHomeRoute()
                 }
             }
@@ -66,6 +65,7 @@ class MainActivity : ComponentActivity() {
 
 data class MobileHomeUiState(
     val isLoading: Boolean = true,
+    val isRefreshing: Boolean = false,
     val isSubmitting: Boolean = false,
     val apiBaseUrl: String = BuildConfig.API_BASE_URL,
     val orders: List<MobileOrderSummary> = emptyList(),
@@ -77,12 +77,7 @@ data class MobileHomeUiState(
     val actionMessage: String? = null
 )
 
-private enum class MobileOrderSortOption {
-    UPDATED_DESC,
-    UPDATED_ASC,
-    TITLE_ASC,
-    STATUS_ASC
-}
+private enum class MobileOrderSortOption { UPDATED_DESC, UPDATED_ASC, TITLE_ASC, STATUS_ASC }
 
 class MobileHomeViewModel(
     private val repository: StatusFlowApiRepository = StatusFlowApiRepository()
@@ -90,28 +85,26 @@ class MobileHomeViewModel(
     private val _uiState = MutableStateFlow(MobileHomeUiState())
     val uiState: StateFlow<MobileHomeUiState> = _uiState.asStateFlow()
 
-    init {
-        refresh()
-    }
+    init { refresh(true) }
 
-    fun refresh() {
+    fun refresh(showLoader: Boolean = true) {
         viewModelScope.launch {
             val currentSelection = _uiState.value.selectedOrderId
             _uiState.value = _uiState.value.copy(
-                isLoading = true,
+                isLoading = if (showLoader) true else _uiState.value.isLoading,
+                isRefreshing = !showLoader,
                 errorMessage = null,
                 actionMessage = null
             )
-
             runCatching {
                 val dashboard = repository.fetchDashboardData()
                 val selectedOrderId = currentSelection ?: dashboard.orders.firstOrNull()?.id
                 val detail = selectedOrderId?.let { orderId -> repository.fetchOrderDetail(orderId) }
-
                 Triple(dashboard, selectedOrderId, detail)
             }.onSuccess { (dashboard, selectedOrderId, detail) ->
                 _uiState.value = MobileHomeUiState(
                     isLoading = false,
+                    isRefreshing = false,
                     apiBaseUrl = BuildConfig.API_BASE_URL,
                     orders = dashboard.orders,
                     users = dashboard.users,
@@ -122,6 +115,7 @@ class MobileHomeViewModel(
             }.onFailure { throwable ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
+                    isRefreshing = false,
                     errorMessage = throwable.message ?: "Unknown network error."
                 )
             }
@@ -130,15 +124,9 @@ class MobileHomeViewModel(
 
     fun selectOrder(orderId: String) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                selectedOrderId = orderId,
-                errorMessage = null
-            )
-
+            _uiState.value = _uiState.value.copy(selectedOrderId = orderId, errorMessage = null)
             runCatching { repository.fetchOrderDetail(orderId) }
-                .onSuccess { detail ->
-                    _uiState.value = _uiState.value.copy(selectedOrderDetail = detail)
-                }
+                .onSuccess { detail -> _uiState.value = _uiState.value.copy(selectedOrderDetail = detail) }
                 .onFailure { throwable ->
                     _uiState.value = _uiState.value.copy(
                         errorMessage = throwable.message ?: "Failed to load order details."
@@ -148,36 +136,23 @@ class MobileHomeViewModel(
     }
 
     fun createOrder(title: String, description: String) {
-        val customer = uiState.value.users.firstOrNull { user -> user.role == "customer" }
-
+        val customer = uiState.value.users.firstOrNull { it.role == "customer" }
         if (customer == null) {
-            _uiState.value = _uiState.value.copy(
-                actionMessage = "Customer seed user is missing."
-            )
+            _uiState.value = _uiState.value.copy(actionMessage = "Customer seed user is missing.")
             return
         }
-
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isSubmitting = true,
-                actionMessage = null,
-                errorMessage = null
-            )
-
+            _uiState.value = _uiState.value.copy(isSubmitting = true, actionMessage = null, errorMessage = null)
             runCatching {
-                repository.createOrder(
-                    title = title,
-                    description = description,
-                    customerId = customer.id
-                )
+                repository.createOrder(title, description, customer.id)
                 val dashboard = repository.fetchDashboardData()
                 val newestOrder = dashboard.orders.firstOrNull()
                 val detail = newestOrder?.id?.let { orderId -> repository.fetchOrderDetail(orderId) }
-
                 Triple(dashboard, newestOrder?.id, detail)
             }.onSuccess { (dashboard, selectedOrderId, detail) ->
                 _uiState.value = MobileHomeUiState(
                     isLoading = false,
+                    isRefreshing = false,
                     isSubmitting = false,
                     apiBaseUrl = BuildConfig.API_BASE_URL,
                     orders = dashboard.orders,
@@ -188,10 +163,7 @@ class MobileHomeViewModel(
                     actionMessage = "Order created successfully."
                 )
             }.onFailure { throwable ->
-                _uiState.value = _uiState.value.copy(
-                    isSubmitting = false,
-                    actionMessage = throwable.message ?: "Order creation failed."
-                )
+                _uiState.value = _uiState.value.copy(isSubmitting = false, actionMessage = throwable.message ?: "Order creation failed.")
             }
         }
     }
@@ -199,91 +171,60 @@ class MobileHomeViewModel(
     fun transitionOrder(toStatus: String) {
         val state = uiState.value
         val selectedOrderId = state.selectedOrderId
-        val operator = state.users.firstOrNull { user -> user.role == "operator" }
-
+        val operator = state.users.firstOrNull { it.role == "operator" }
         if (selectedOrderId == null) {
             _uiState.value = state.copy(actionMessage = "Pick an order before changing status.")
             return
         }
-
         if (operator == null) {
             _uiState.value = state.copy(actionMessage = "Operator seed user is missing.")
             return
         }
-
-        viewModelScope.launch {
-            _uiState.value = state.copy(
-                isSubmitting = true,
-                actionMessage = null,
-                errorMessage = null
-            )
-
-            runCatching {
-                repository.transitionOrderStatus(
-                    orderId = selectedOrderId,
-                    changedById = operator.id,
-                    toStatus = toStatus
-                )
-                val dashboard = repository.fetchDashboardData()
-                val detail = repository.fetchOrderDetail(selectedOrderId)
-
-                dashboard to detail
-            }.onSuccess { (dashboard, detail) ->
-                _uiState.value = MobileHomeUiState(
-                    isLoading = false,
-                    isSubmitting = false,
-                    apiBaseUrl = BuildConfig.API_BASE_URL,
-                    orders = dashboard.orders,
-                    users = dashboard.users,
-                    allowedTransitions = dashboard.allowedTransitions,
-                    selectedOrderId = selectedOrderId,
-                    selectedOrderDetail = detail,
-                    actionMessage = "Order moved to ${detail.statusLabel}."
-                )
-            }.onFailure { throwable ->
-                _uiState.value = _uiState.value.copy(
-                    isSubmitting = false,
-                    actionMessage = throwable.message ?: "Status transition failed."
-                )
-            }
-        }
+        mutateSelectedOrder(
+            state = state,
+            selectedOrderId = selectedOrderId,
+            action = { repository.transitionOrderStatus(selectedOrderId, operator.id, toStatus) },
+            successMessage = { detail -> "Order moved to ${detail.statusLabel}." }
+        )
     }
 
     fun addComment(body: String) {
         val state = uiState.value
         val selectedOrderId = state.selectedOrderId
-        val operator = state.users.firstOrNull { user -> user.role == "operator" }
-
+        val operator = state.users.firstOrNull { it.role == "operator" }
         if (selectedOrderId == null) {
             _uiState.value = state.copy(actionMessage = "Pick an order before adding a comment.")
             return
         }
-
         if (operator == null) {
             _uiState.value = state.copy(actionMessage = "Operator seed user is missing.")
             return
         }
+        mutateSelectedOrder(
+            state = state,
+            selectedOrderId = selectedOrderId,
+            action = { repository.addComment(selectedOrderId, operator.id, body) },
+            successMessage = { "Comment added successfully." }
+        )
+    }
 
+    private fun mutateSelectedOrder(
+        state: MobileHomeUiState,
+        selectedOrderId: String,
+        action: suspend () -> Unit,
+        successMessage: (MobileOrderDetail) -> String
+    ) {
         viewModelScope.launch {
-            _uiState.value = state.copy(
-                isSubmitting = true,
-                actionMessage = null,
-                errorMessage = null
-            )
-
+            _uiState.value = state.copy(isSubmitting = true, actionMessage = null, errorMessage = null)
             runCatching {
-                repository.addComment(
-                    orderId = selectedOrderId,
-                    authorId = operator.id,
-                    body = body
-                )
+                action()
                 val dashboard = repository.fetchDashboardData()
                 val detail = repository.fetchOrderDetail(selectedOrderId)
-
                 dashboard to detail
             }.onSuccess { (dashboard, detail) ->
                 _uiState.value = MobileHomeUiState(
                     isLoading = false,
+                    isRefreshing = false,
                     isSubmitting = false,
                     apiBaseUrl = BuildConfig.API_BASE_URL,
                     orders = dashboard.orders,
@@ -291,13 +232,10 @@ class MobileHomeViewModel(
                     allowedTransitions = dashboard.allowedTransitions,
                     selectedOrderId = selectedOrderId,
                     selectedOrderDetail = detail,
-                    actionMessage = "Comment added successfully."
+                    actionMessage = successMessage(detail)
                 )
             }.onFailure { throwable ->
-                _uiState.value = _uiState.value.copy(
-                    isSubmitting = false,
-                    actionMessage = throwable.message ?: "Comment submission failed."
-                )
+                _uiState.value = _uiState.value.copy(isSubmitting = false, actionMessage = throwable.message ?: "Action failed.")
             }
         }
     }
@@ -305,16 +243,14 @@ class MobileHomeViewModel(
 
 @Composable
 fun MobileHomeRoute() {
-    val viewModel: MobileHomeViewModel = viewModel(
-        factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = MobileHomeViewModel() as T
-        }
-    )
+    val viewModel: MobileHomeViewModel = viewModel(factory = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = MobileHomeViewModel() as T
+    })
     val state by viewModel.uiState.collectAsState()
     MobileHomeScreen(
         state = state,
-        onRefresh = viewModel::refresh,
+        onRefresh = { viewModel.refresh(false) },
         onCreateOrder = viewModel::createOrder,
         onSelectOrder = viewModel::selectOrder,
         onTransitionOrder = viewModel::transitionOrder,
@@ -322,6 +258,7 @@ fun MobileHomeRoute() {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MobileHomeScreen(
     state: MobileHomeUiState,
@@ -337,141 +274,91 @@ fun MobileHomeScreen(
     var statusFilter by remember { mutableStateOf<String?>(null) }
     var sortOption by remember { mutableStateOf(MobileOrderSortOption.UPDATED_DESC) }
 
-    val availableStatuses = state.orders.map { order -> order.rawStatus }.distinct()
-    val visibleOrders = state.orders
-        .filter { order -> statusFilter == null || order.rawStatus == statusFilter }
-        .let { orders ->
-            when (sortOption) {
-                MobileOrderSortOption.UPDATED_DESC -> orders
-                MobileOrderSortOption.UPDATED_ASC -> orders.reversed()
-                MobileOrderSortOption.TITLE_ASC -> orders.sortedBy { order -> order.title.lowercase() }
-                MobileOrderSortOption.STATUS_ASC -> orders.sortedWith(
-                    compareBy<MobileOrderSummary> { order -> statusLabel(order.rawStatus) }
-                        .thenBy { order -> order.title.lowercase() }
-                )
-            }
+    val availableStatuses = state.orders.map { it.rawStatus }.distinct()
+    val visibleOrders = state.orders.filter { statusFilter == null || it.rawStatus == statusFilter }.let { orders ->
+        when (sortOption) {
+            MobileOrderSortOption.UPDATED_DESC -> orders
+            MobileOrderSortOption.UPDATED_ASC -> orders.reversed()
+            MobileOrderSortOption.TITLE_ASC -> orders.sortedBy { it.title.lowercase() }
+            MobileOrderSortOption.STATUS_ASC -> orders.sortedWith(compareBy<MobileOrderSummary> { statusLabel(it.rawStatus) }.thenBy { it.title.lowercase() })
         }
+    }
 
     Scaffold { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color(0xFF0B1220), Color(0xFF13243E))
-                    )
-                )
+            modifier = Modifier.fillMaxSize()
+                .background(Brush.verticalGradient(listOf(Color(0xFF0B1220), Color(0xFF13243E))))
                 .padding(padding)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                item {
-                    Text(
-                        text = "StatusFlow",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                item {
-                    Text(
-                        text = "Mobile client connected to the shared API. Create new orders here, inspect a selected order, and move it through the same workflow used by the web dashboard.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color(0xFFD2DAE6)
-                    )
-                }
-                item {
-                    ApiCard(state.apiBaseUrl)
-                }
-                item {
-                    CreateOrderCard(
-                        title = title,
-                        description = description,
-                        isSubmitting = state.isSubmitting,
-                        isLoading = state.isLoading,
-                        onTitleChange = { title = it },
-                        onDescriptionChange = { description = it },
-                        onCreate = {
-                            onCreateOrder(title.trim(), description.trim())
-                            title = ""
-                            description = ""
-                        },
-                        onRefresh = onRefresh
-                    )
-                }
-                item {
-                    ListControlsCard(
-                        selectedStatus = statusFilter,
-                        availableStatuses = availableStatuses,
-                        sortOption = sortOption,
-                        onSelectStatus = { selected ->
-                            statusFilter = if (statusFilter == selected) null else selected
-                        },
-                        onToggleSort = {
-                            sortOption = when (sortOption) {
-                                MobileOrderSortOption.UPDATED_DESC -> MobileOrderSortOption.UPDATED_ASC
-                                MobileOrderSortOption.UPDATED_ASC -> MobileOrderSortOption.TITLE_ASC
-                                MobileOrderSortOption.TITLE_ASC -> MobileOrderSortOption.STATUS_ASC
-                                MobileOrderSortOption.STATUS_ASC -> MobileOrderSortOption.UPDATED_DESC
-                            }
-                        }
-                    )
-                }
-
-                if (state.actionMessage != null) {
+            PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    item { ScreenTitle() }
+                    item { ApiCard(state.apiBaseUrl) }
                     item {
-                        StatusMessageCard(
-                            title = "Latest action",
-                            body = state.actionMessage
+                        CreateOrderCard(
+                            title = title,
+                            description = description,
+                            isSubmitting = state.isSubmitting,
+                            isLoading = state.isLoading || state.isRefreshing,
+                            onTitleChange = { title = it },
+                            onDescriptionChange = { description = it },
+                            onCreate = { onCreateOrder(title.trim(), description.trim()); title = ""; description = "" },
+                            onRefresh = onRefresh
                         )
                     }
-                }
-
-                when {
-                    state.isLoading -> {
-                        item {
-                            StatusMessageCard(
-                                title = "Syncing orders",
-                                body = "Fetching the latest order list from the API."
-                            )
-                        }
+                    item {
+                        ListControlsCard(
+                            selectedStatus = statusFilter,
+                            availableStatuses = availableStatuses,
+                            sortOption = sortOption,
+                            onSelectStatus = { selected -> statusFilter = if (statusFilter == selected) null else selected },
+                            onToggleSort = {
+                                sortOption = when (sortOption) {
+                                    MobileOrderSortOption.UPDATED_DESC -> MobileOrderSortOption.UPDATED_ASC
+                                    MobileOrderSortOption.UPDATED_ASC -> MobileOrderSortOption.TITLE_ASC
+                                    MobileOrderSortOption.TITLE_ASC -> MobileOrderSortOption.STATUS_ASC
+                                    MobileOrderSortOption.STATUS_ASC -> MobileOrderSortOption.UPDATED_DESC
+                                }
+                            }
+                        )
                     }
+                    if (state.actionMessage != null) item { StatusMessageCard("Latest action", state.actionMessage) }
 
-                    state.errorMessage != null -> {
-                        item {
-                            StatusMessageCard(
-                                title = "Sync failed",
-                                body = state.errorMessage
-                            )
-                        }
-                    }
-
-                    else -> {
-                        item {
-                            DetailCard(
-                                detail = state.selectedOrderDetail,
-                                allowedTransitions = state.selectedOrderDetail?.let { detail ->
-                                    state.allowedTransitions[detail.rawStatus].orEmpty()
-                                }.orEmpty(),
-                                isSubmitting = state.isSubmitting,
-                                commentBody = commentBody,
-                                onCommentBodyChange = { commentBody = it },
-                                onTransitionOrder = onTransitionOrder,
-                                onAddComment = { onAddComment(commentBody.trim()) }
-                            )
-                        }
-
-                        items(visibleOrders) { item ->
-                            OrderCard(
-                                order = item,
-                                isSelected = state.selectedOrderId == item.id,
-                                onSelectOrder = onSelectOrder
-                            )
+                    when {
+                        state.isLoading -> item { StatusMessageCard("Syncing orders", "Fetching the latest order list from the API.") }
+                        state.errorMessage != null -> item { StatusMessageCard("Sync failed", state.errorMessage) }
+                        else -> {
+                            item {
+                                DetailCard(
+                                    detail = state.selectedOrderDetail,
+                                    allowedTransitions = state.selectedOrderDetail?.let { state.allowedTransitions[it.rawStatus].orEmpty() }.orEmpty(),
+                                    isSubmitting = state.isSubmitting,
+                                    commentBody = commentBody,
+                                    onCommentBodyChange = { commentBody = it },
+                                    onTransitionOrder = onTransitionOrder,
+                                    onAddComment = { onAddComment(commentBody.trim()) }
+                                )
+                            }
+                            if (visibleOrders.isEmpty()) {
+                                item {
+                                    EmptyQueueCard(
+                                        title = if (state.orders.isEmpty()) "No orders yet" else "No orders match this filter",
+                                        body = if (state.orders.isEmpty()) {
+                                            "Create the first order from this screen or pull down to refresh when the backend receives new work."
+                                        } else {
+                                            "Clear the current filter or change the sort to inspect a different slice of the queue."
+                                        }
+                                    )
+                                }
+                            } else {
+                                items(visibleOrders) { item ->
+                                    OrderCard(order = item, isSelected = state.selectedOrderId == item.id, onSelectOrder = onSelectOrder)
+                                }
+                            }
                         }
                     }
                 }
@@ -481,25 +368,23 @@ fun MobileHomeScreen(
 }
 
 @Composable
+private fun ScreenTitle() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("StatusFlow", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
+        Text(
+            "Mobile client connected to the shared API. Create new orders here, inspect a selected order, and move it through the same workflow used by the web dashboard.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color(0xFFD2DAE6)
+        )
+    }
+}
+
+@Composable
 private fun ApiCard(apiBaseUrl: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "Current API",
-                style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF92B1F7)
-            )
-            Text(
-                text = apiBaseUrl,
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White
-            )
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Current API", style = MaterialTheme.typography.labelMedium, color = Color(0xFF92B1F7))
+            Text(apiBaseUrl, style = MaterialTheme.typography.bodyLarge, color = Color.White)
         }
     }
 }
@@ -515,45 +400,14 @@ private fun CreateOrderCard(
     onCreate: () -> Unit,
     onRefresh: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "Create order",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White
-            )
-            OutlinedTextField(
-                value = title,
-                onValueChange = onTitleChange,
-                label = { Text("Title") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = description,
-                onValueChange = onDescriptionChange,
-                label = { Text("Description") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3
-            )
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Create order", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            OutlinedTextField(value = title, onValueChange = onTitleChange, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = description, onValueChange = onDescriptionChange, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    enabled = !isSubmitting && title.length >= 3,
-                    onClick = onCreate
-                ) {
-                    Text(if (isSubmitting) "Submitting..." else "Create")
-                }
-                Button(
-                    enabled = !isLoading && !isSubmitting,
-                    onClick = onRefresh
-                ) {
-                    Text("Refresh")
-                }
+                Button(enabled = !isSubmitting && title.length >= 3, onClick = onCreate) { Text(if (isSubmitting) "Submitting..." else "Create") }
+                Button(enabled = !isLoading && !isSubmitting, onClick = onRefresh) { Text("Refresh") }
             }
         }
     }
@@ -567,41 +421,17 @@ private fun ListControlsCard(
     onSelectStatus: (String) -> Unit,
     onToggleSort: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "Queue controls",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White
-            )
-            Text(
-                text = "Sort: ${sortOptionLabel(sortOption)}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFD2DAE6)
-            )
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Queue controls", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text("Sort: ${sortOptionLabel(sortOption)}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onToggleSort) {
-                    Text("Change sort")
-                }
-                if (selectedStatus != null) {
-                    Button(onClick = { onSelectStatus(selectedStatus) }) {
-                        Text("Clear filter")
-                    }
-                }
+                Button(onClick = onToggleSort) { Text("Change sort") }
+                if (selectedStatus != null) Button(onClick = { onSelectStatus(selectedStatus) }) { Text("Clear filter") }
             }
             if (availableStatuses.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    availableStatuses.forEach { status ->
-                        Button(onClick = { onSelectStatus(status) }) {
-                            Text(statusLabel(status))
-                        }
-                    }
+                    availableStatuses.forEach { status -> Button(onClick = { onSelectStatus(status) }) { Text(statusLabel(status)) } }
                 }
             }
         }
@@ -618,124 +448,44 @@ private fun DetailCard(
     onTransitionOrder: (String) -> Unit,
     onAddComment: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C3456))
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF1C3456))) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (detail == null) {
-                Text(
-                    text = "Order detail",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White
-                )
-                Text(
-                    text = "Select an order below to inspect its description, comments, and status history.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFD2DAE6)
-                )
+                Text("Order detail", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Text("Select an order below to inspect its description, comments, and status history.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
                 return@Column
             }
-
-            Text(
-                text = "${detail.code} - ${detail.title}",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White
-            )
-            Text(
-                text = "Customer: ${detail.customerName}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFD2DAE6)
-            )
-            Text(
-                text = "Status: ${detail.statusLabel}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = detail.statusColor
-            )
-            Text(
-                text = detail.description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White
-            )
-            Text(
-                text = "Updated ${detail.updatedAtLabel}",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF92B1F7)
-            )
-
-            Text(
-                text = "Next steps",
-                style = MaterialTheme.typography.titleSmall,
-                color = Color.White
-            )
+            Text("${detail.code} - ${detail.title}", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text("Customer: ${detail.customerName}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
+            Text("Status: ${detail.statusLabel}", style = MaterialTheme.typography.bodyMedium, color = detail.statusColor)
+            Text(detail.description, style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF92B1F7))
+            Text("Next steps", style = MaterialTheme.typography.titleSmall, color = Color.White)
             if (allowedTransitions.isEmpty()) {
-                Text(
-                    text = "This order is already in a terminal state.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFD2DAE6)
-                )
+                Text("This order is already in a terminal state.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     allowedTransitions.forEach { status ->
-                        Button(
-                            enabled = !isSubmitting,
-                            onClick = { onTransitionOrder(status) }
-                        ) {
-                            Text(statusLabel(status))
-                        }
+                        Button(enabled = !isSubmitting, onClick = { onTransitionOrder(status) }) { Text(statusLabel(status)) }
                     }
                 }
             }
-
-            Text(
-                text = "History",
-                style = MaterialTheme.typography.titleSmall,
-                color = Color.White
-            )
+            Text("History", style = MaterialTheme.typography.titleSmall, color = Color.White)
             detail.history.takeLast(4).reversed().forEach { event ->
-                TimelineEntry(
-                    title = event.summary,
-                    meta = "${event.actorName} - ${event.changedAtLabel}",
-                    body = event.reason
-                )
+                TimelineEntry(event.summary, "${event.actorName} - ${event.changedAtLabel}", event.reason)
             }
-
-            Text(
-                text = "Comments",
-                style = MaterialTheme.typography.titleSmall,
-                color = Color.White
-            )
-            OutlinedTextField(
-                value = commentBody,
-                onValueChange = onCommentBodyChange,
-                label = { Text("Add operator note") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2
-            )
+            Text("Comments", style = MaterialTheme.typography.titleSmall, color = Color.White)
+            OutlinedTextField(value = commentBody, onValueChange = onCommentBodyChange, label = { Text("Add operator note") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
-                    onClick = onAddComment
-                ) {
+                Button(enabled = !isSubmitting && commentBody.trim().isNotEmpty(), onClick = onAddComment) {
                     Text(if (isSubmitting) "Sending..." else "Post comment")
                 }
             }
             if (detail.comments.isEmpty()) {
-                Text(
-                    text = "No comments yet.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFD2DAE6)
-                )
+                Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
             } else {
                 detail.comments.reversed().forEach { comment ->
-                    TimelineEntry(
-                        title = comment.authorName,
-                        meta = comment.createdAtLabel,
-                        body = comment.body
-                    )
+                    TimelineEntry(comment.authorName, comment.createdAtLabel, comment.body)
                 }
             }
         }
@@ -743,124 +493,60 @@ private fun DetailCard(
 }
 
 @Composable
-private fun OrderCard(
-    order: MobileOrderSummary,
-    isSelected: Boolean,
-    onSelectOrder: (String) -> Unit
-) {
+private fun EmptyQueueCard(title: String, body: String) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text(body, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
+        }
+    }
+}
+
+@Composable
+private fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectOrder: (String) -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelectOrder(order.id) },
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) Color(0xFF23406A) else Color(0xFF172A45)
-        )
+        modifier = Modifier.fillMaxWidth().clickable { onSelectOrder(order.id) },
+        colors = CardDefaults.cardColors(containerColor = if (isSelected) Color(0xFF23406A) else Color(0xFF172A45))
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = order.code,
-                style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF92B1F7)
-            )
-            Text(
-                text = order.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White
-            )
-            Text(
-                text = "Customer: ${order.customerName}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFD2DAE6)
-            )
-            Text(
-                text = "Status: ${order.statusLabel}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = order.statusColor
-            )
-            Text(
-                text = "Updated ${order.updatedAtLabel}",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF92B1F7)
-            )
-            if (isSelected) {
-                Text(
-                    text = "Selected for detail view",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White
-                )
-            }
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(order.code, style = MaterialTheme.typography.labelMedium, color = Color(0xFF92B1F7))
+            Text(order.title, style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text("Customer: ${order.customerName}", style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
+            Text("Status: ${order.statusLabel}", style = MaterialTheme.typography.bodyMedium, color = order.statusColor)
+            Text("Updated ${order.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Color(0xFF92B1F7))
+            if (isSelected) Text("Selected for detail view", style = MaterialTheme.typography.bodySmall, color = Color.White)
         }
     }
 }
 
 @Composable
 private fun TimelineEntry(title: String, meta: String, body: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF13243E))
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = meta,
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF92B1F7)
-            )
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFD2DAE6)
-            )
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF13243E))) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = Color.White, fontWeight = FontWeight.Medium)
+            Text(meta, style = MaterialTheme.typography.bodySmall, color = Color(0xFF92B1F7))
+            Text(body, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
         }
     }
 }
 
 @Composable
 private fun StatusMessageCard(title: String, body: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White
-            )
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFD2DAE6)
-            )
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF172A45))) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text(body, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFD2DAE6))
         }
     }
 }
 
-private fun statusLabel(status: String): String {
-    return status.split("_").joinToString(" ") { token ->
-        token.replaceFirstChar { character -> character.uppercase() }
-    }
+private fun statusLabel(status: String): String = status.split("_").joinToString(" ") {
+    it.replaceFirstChar { character -> character.uppercase() }
 }
 
-private fun sortOptionLabel(option: MobileOrderSortOption): String {
-    return when (option) {
-        MobileOrderSortOption.UPDATED_DESC -> "Newest first"
-        MobileOrderSortOption.UPDATED_ASC -> "Oldest first"
-        MobileOrderSortOption.TITLE_ASC -> "Title A-Z"
-        MobileOrderSortOption.STATUS_ASC -> "Status"
-    }
+private fun sortOptionLabel(option: MobileOrderSortOption): String = when (option) {
+    MobileOrderSortOption.UPDATED_DESC -> "Newest first"
+    MobileOrderSortOption.UPDATED_ASC -> "Oldest first"
+    MobileOrderSortOption.TITLE_ASC -> "Title A-Z"
+    MobileOrderSortOption.STATUS_ASC -> "Status"
 }
