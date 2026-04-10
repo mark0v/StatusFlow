@@ -332,24 +332,11 @@ fun MobileHomeScreen(
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
                     item { ScreenTitle() }
-                    item { ApiCard(state.apiBaseUrl) }
                     item {
                         QueueOverviewCard(
                             totalOrders = state.orders.size,
                             visibleOrders = visibleOrders.size,
                             selectedOrderCode = state.selectedOrderDetail?.code
-                        )
-                    }
-                    item {
-                        CreateOrderCard(
-                            title = title,
-                            description = description,
-                            isSubmitting = state.isSubmitting,
-                            isLoading = state.isLoading || state.isRefreshing,
-                            onTitleChange = { title = it },
-                            onDescriptionChange = { description = it },
-                            onCreate = { onCreateOrder(title.trim(), description.trim()); title = ""; description = "" },
-                            onRefresh = onRefresh
                         )
                     }
                     item {
@@ -378,6 +365,12 @@ fun MobileHomeScreen(
                         else -> {
                             if (isShowingDetail && state.selectedOrderDetail != null) {
                                 item {
+                                    QueueSectionHeader(
+                                        title = "Selected order",
+                                        subtitle = "Review details, update status, and leave context for the next operator."
+                                    )
+                                }
+                                item {
                                     DetailScreenCard(
                                         detail = state.selectedOrderDetail,
                                         allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
@@ -391,6 +384,12 @@ fun MobileHomeScreen(
                                     )
                                 }
                             } else {
+                                item {
+                                    QueueSectionHeader(
+                                        title = "Active queue",
+                                        subtitle = "Tap any card to move from scan mode into detail mode."
+                                    )
+                                }
                                 if (visibleOrders.isEmpty()) {
                                     item {
                                         EmptyQueueCard(
@@ -417,6 +416,19 @@ fun MobileHomeScreen(
                             }
                         }
                     }
+                    item {
+                        CreateOrderCard(
+                            title = title,
+                            description = description,
+                            isSubmitting = state.isSubmitting,
+                            isLoading = state.isLoading || state.isRefreshing,
+                            onTitleChange = { title = it },
+                            onDescriptionChange = { description = it },
+                            onCreate = { onCreateOrder(title.trim(), description.trim()); title = ""; description = "" },
+                            onRefresh = onRefresh
+                        )
+                    }
+                    item { ApiCard(state.apiBaseUrl) }
                 }
             }
         }
@@ -425,7 +437,7 @@ fun MobileHomeScreen(
 
 @Composable
 private fun ScreenTitle() {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             "MOBILE OPS",
             style = MaterialTheme.typography.labelLarge,
@@ -434,14 +446,14 @@ private fun ScreenTitle() {
         )
         Text(
             "StatusFlow",
-            style = MaterialTheme.typography.headlineLarge,
+            style = MaterialTheme.typography.headlineMedium,
             color = Color.White,
             fontWeight = FontWeight.Bold
         )
         Text(
-            "A calm queue-first workspace for creating orders, triaging what matters, and moving jobs forward from the same shared workflow as the web console.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = Slate200
+            "Queue-first control for the same shared workflow used on web.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Slate300
         )
     }
 }
@@ -449,13 +461,22 @@ private fun ScreenTitle() {
 @Composable
 private fun ApiCard(apiBaseUrl: String) {
     ShellCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Connected backend", style = MaterialTheme.typography.labelMedium, color = Blue300)
-            Text(apiBaseUrl, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                Text("Connected backend", style = MaterialTheme.typography.labelMedium, color = Blue300)
+                Text(apiBaseUrl, style = MaterialTheme.typography.bodyMedium, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             Text(
-                "Pull to refresh anytime. Queue state, comments, and transitions stay aligned with the API contract.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Slate300
+                "Live",
+                style = MaterialTheme.typography.labelMedium,
+                color = Mint400,
+                fontWeight = FontWeight.SemiBold
             )
         }
     }
@@ -472,10 +493,10 @@ private fun QueueOverviewCard(totalOrders: Int, visibleOrders: Int, selectedOrde
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Queue snapshot", style = MaterialTheme.typography.labelLarge, color = Mint400, fontWeight = FontWeight.SemiBold)
                 Text("Keep the active workload visible before diving into details.", style = MaterialTheme.typography.bodyMedium, color = Slate100)
             }
@@ -497,7 +518,7 @@ private fun QueueOverviewCard(totalOrders: Int, visibleOrders: Int, selectedOrde
                 colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.9f)),
                 shape = RoundedCornerShape(20.dp)
             ) {
-                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Focus order", style = MaterialTheme.typography.labelMedium, color = Slate300)
                     Text(selectedOrderCode ?: "No order selected", style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
@@ -566,6 +587,14 @@ private fun CreateOrderCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun QueueSectionHeader(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.SemiBold)
+        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Slate300)
     }
 }
 
