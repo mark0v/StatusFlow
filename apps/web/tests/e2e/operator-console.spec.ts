@@ -68,6 +68,30 @@ test.describe("StatusFlow operator console", () => {
     await expect(createdRow).toContainText("In review");
   });
 
+  test("shows history and posts a live comment in the inspector", async ({ page }) => {
+    const orderTitle = `Inspector order ${uniqueSuffix()}`;
+    const commentBody = `Live note ${uniqueSuffix()}`;
+
+    await signIn(page);
+
+    await page.getByRole("button", { name: "Create order" }).click();
+    await page.getByLabel("Order title").fill(orderTitle);
+    await page.getByLabel("Description").fill("Created to verify comments and history in the inspector.");
+    await page.getByRole("button", { name: /^Create order$/ }).click();
+
+    const createdRow = page.locator("tbody tr").filter({ hasText: orderTitle }).first();
+    await expect(createdRow).toBeVisible();
+
+    await createdRow.click();
+    await expect(page.getByText("Comments and workflow history")).toBeVisible();
+    await expect(page.getByText("Created in New")).toBeVisible();
+
+    await page.getByLabel("Add comment").fill(commentBody);
+    await page.getByRole("button", { name: "Post comment" }).click();
+
+    await expect(page.getByText(commentBody)).toBeVisible();
+  });
+
   test("closes row status actions when clicking outside", async ({ page }) => {
     await signIn(page);
 

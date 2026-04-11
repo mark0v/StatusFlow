@@ -20,6 +20,28 @@ type Order = {
   updated_at: string;
 };
 
+type OrderComment = {
+  id: string;
+  body: string;
+  created_at: string;
+  author: User;
+};
+
+type OrderHistoryEvent = {
+  id: string;
+  from_status: OrderStatus | null;
+  to_status: OrderStatus;
+  reason: string;
+  changed_at: string;
+  changed_by: User;
+};
+
+type OrderDetail = Order & {
+  description: string;
+  comments: OrderComment[];
+  history: OrderHistoryEvent[];
+};
+
 type User = {
   id: string;
   email: string;
@@ -104,6 +126,35 @@ function jsonResponse(payload: unknown, init?: ResponseInit) {
 function installFetchMock(initialOrders = baseOrders()) {
   let orders = [...initialOrders];
   let orderCounter = 1000 + orders.length;
+  const details = new Map<string, OrderDetail>(
+    orders.map((order, index) => [
+      order.id,
+      {
+        ...order,
+        description: `Order detail for ${order.title}.`,
+        comments: index === 0
+          ? [
+              {
+                id: "comment-1",
+                body: "Initial operator note.",
+                created_at: "2026-04-10T14:40:00Z",
+                author: users[1]
+              }
+            ]
+          : [],
+        history: [
+          {
+            id: `history-${order.id}`,
+            from_status: null,
+            to_status: order.status,
+            reason: "Created from the seeded queue.",
+            changed_at: order.updated_at,
+            changed_by: users[1]
+          }
+        ]
+      }
+    ])
+  );
   const session: AuthSession = {
     access_token: "test-token",
     token_type: "bearer",
@@ -139,6 +190,14 @@ function installFetchMock(initialOrders = baseOrders()) {
       return jsonResponse(orders);
     }
 
+    const orderMatch = path.match(/^\/orders\/([^/]+)$/);
+    if (orderMatch && method === "GET") {
+      const detail = details.get(orderMatch[1]);
+      return detail
+        ? jsonResponse(detail)
+        : jsonResponse({ detail: "Not found." }, { status: 404 });
+    }
+
     if (path === "/users" && method === "GET") {
       return jsonResponse(users);
     }
@@ -167,6 +226,27 @@ function installFetchMock(initialOrders = baseOrders()) {
         ...orders
       ];
 
+      details.set(`order-${orderCounter}`, {
+        id: `order-${orderCounter}`,
+        code: `SF-${orderCounter}`,
+        title: body.title,
+        description: body.description,
+        customer_name: users[0].name,
+        status: "new",
+        updated_at: "2026-04-10T17:45:00Z",
+        comments: [],
+        history: [
+          {
+            id: `history-${orderCounter}`,
+            from_status: null,
+            to_status: "new",
+            reason: "Created from the web console.",
+            changed_at: "2026-04-10T17:45:00Z",
+            changed_by: users[1]
+          }
+        ]
+      });
+
       return jsonResponse({ ok: true }, { status: 201 });
     }
 
@@ -185,6 +265,53 @@ function installFetchMock(initialOrders = baseOrders()) {
             }
           : order
       );
+
+      const detail = details.get(transitionMatch[1]);
+      if (detail) {
+        details.set(transitionMatch[1], {
+          ...detail,
+          status: body.to_status,
+          updated_at: "2026-04-10T18:00:00Z",
+          history: [
+            ...detail.history,
+            {
+              id: `history-transition-${detail.id}`,
+              from_status: detail.status,
+              to_status: body.to_status,
+              reason: `Operator moved order to ${body.to_status}.`,
+              changed_at: "2026-04-10T18:00:00Z",
+              changed_by: users[1]
+            }
+          ]
+        });
+      }
+
+      return jsonResponse({ ok: true }, { status: 201 });
+    }
+
+    const commentMatch = path.match(/^\/orders\/([^/]+)\/comments$/);
+    if (commentMatch && method === "POST") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        body: string;
+      };
+      const detail = details.get(commentMatch[1]);
+
+      if (!detail) {
+        return jsonResponse({ detail: "Not found." }, { status: 404 });
+      }
+
+      details.set(commentMatch[1], {
+        ...detail,
+        comments: [
+          ...detail.comments,
+          {
+            id: `comment-${detail.comments.length + 1}`,
+            body: body.body,
+            created_at: "2026-04-10T18:10:00Z",
+            author: users[1]
+          }
+        ]
+      });
 
       return jsonResponse({ ok: true }, { status: 201 });
     }
@@ -232,7 +359,7 @@ describe("App", () => {
     await user.clear(screen.getByLabelText("Password"));
     await user.type(screen.getByLabelText("Password"), "operator123");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
-    await screen.findByText("Replace display unit");
+    await screen.findByRole("heading", { name: "Operate the live workflow" });
 
     return user;
   }
@@ -272,14 +399,14 @@ describe("App", () => {
     );
     await user.click(screen.getByRole("button", { name: /^Create order$/ }));
 
-    await screen.findByText("Inspect return shipment");
+    await screen.findByRole("cell", { name: "Inspect return shipment" });
     expect(within(getStatusCard("New")).getByText("2")).toBeInTheDocument();
   });
 
   it("opens and closes row status actions, then updates the visible status", async () => {
     const user = await signIn();
 
-    const rowTitle = await screen.findByText("Replace display unit");
+    const rowTitle = await screen.findByRole("cell", { name: "Replace display unit" });
     const row = rowTitle.closest("tr");
 
     if (!row) {
@@ -301,5 +428,27 @@ describe("App", () => {
     await waitFor(() => {
       expect(within(row).getByText("In review")).toBeInTheDocument();
     });
+  });
+
+  it("shows order history and posts a new comment in the inspector", async () => {
+    const user = await signIn();
+
+    const rowTitle = await screen.findByRole("cell", { name: "Replace display unit" });
+    const row = rowTitle.closest("tr");
+
+    if (!row) {
+      throw new Error("Unable to find table row for Replace display unit");
+    }
+
+    await user.click(row);
+
+    await screen.findByText("Recent status movement");
+    expect(screen.getByText("Initial operator note.")).toBeInTheDocument();
+    expect(screen.getByText("Created in New")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Add comment"), "Follow-up note from the test");
+    await user.click(screen.getByRole("button", { name: "Post comment" }));
+
+    await screen.findByText("Follow-up note from the test");
   });
 });

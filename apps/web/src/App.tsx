@@ -18,6 +18,28 @@ type OrderCard = {
   updated_at: string;
 };
 
+type OrderComment = {
+  id: string;
+  body: string;
+  created_at: string;
+  author: UserSummary;
+};
+
+type OrderHistoryEvent = {
+  id: string;
+  from_status: OrderStatus | null;
+  to_status: OrderStatus;
+  reason: string;
+  changed_at: string;
+  changed_by: UserSummary;
+};
+
+type OrderDetail = OrderCard & {
+  description: string;
+  comments: OrderComment[];
+  history: OrderHistoryEvent[];
+};
+
 type UserSummary = {
   id: string;
   email: string;
@@ -90,6 +112,11 @@ const formatTimestamp = (value: string) =>
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(value));
+
+const historySummary = (event: OrderHistoryEvent) =>
+  event.from_status
+    ? `${statusLabels[event.from_status]} -> ${statusLabels[event.to_status]}`
+    : `Created in ${statusLabels[event.to_status]}`;
 
 function readStoredSession() {
   const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
@@ -165,6 +192,11 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus[]>([]);
   const [isStatusFilterOpen, setIsStatusFilterOpen] = useState(false);
   const [openActionsOrderId, setOpenActionsOrderId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedOrderDetail, setSelectedOrderDetail] = useState<OrderDetail | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState("");
 
   async function loadDashboardData(accessToken: string, signal?: AbortSignal) {
     const [ordersJson, usersJson, lifecycleJson] = await Promise.all([
@@ -173,9 +205,72 @@ export default function App() {
       readJson<OrderStatusLifecycle>("/order-status-lifecycle", accessToken, { signal })
     ]);
 
-    setOrders(ordersJson);
-    setUsers(usersJson);
-    setLifecycle(lifecycleJson);
+    return {
+      orders: ordersJson,
+      users: usersJson,
+      lifecycle: lifecycleJson
+    };
+  }
+
+  function applyDashboardData(data: {
+    orders: OrderCard[];
+    users: UserSummary[];
+    lifecycle: OrderStatusLifecycle;
+  }) {
+    setOrders(data.orders);
+    setUsers(data.users);
+    setLifecycle(data.lifecycle);
+  }
+
+  async function loadOrderDetail(orderId: string, accessToken: string, signal?: AbortSignal) {
+    return readJson<OrderDetail>(`/orders/${orderId}`, accessToken, { signal });
+  }
+
+  async function refreshDashboardAndDetail(
+    accessToken: string,
+    preferredSelectedOrderId?: string | null,
+    signal?: AbortSignal
+  ) {
+    const dashboard = await loadDashboardData(accessToken, signal);
+    applyDashboardData(dashboard);
+
+    const nextSelectedOrderId =
+      preferredSelectedOrderId && dashboard.orders.some((order) => order.id === preferredSelectedOrderId)
+        ? preferredSelectedOrderId
+        : dashboard.orders[0]?.id ?? null;
+
+    setSelectedOrderId(nextSelectedOrderId);
+
+    if (!nextSelectedOrderId) {
+      setSelectedOrderDetail(null);
+      setDetailError(null);
+      setIsDetailLoading(false);
+      return;
+    }
+
+    setIsDetailLoading(true);
+    setDetailError(null);
+    try {
+      const detail = await loadOrderDetail(nextSelectedOrderId, accessToken, signal);
+      setSelectedOrderDetail(detail);
+    } finally {
+      setIsDetailLoading(false);
+    }
+  }
+
+  function handleAuthExpired(message = "Your session expired. Sign in again.") {
+    persistSession(null);
+    setSession(null);
+    setOrders([]);
+    setUsers([]);
+    setLifecycle(null);
+    setSelectedOrderId(null);
+    setSelectedOrderDetail(null);
+    setDetailError(null);
+    setCommentDraft("");
+    setOpenActionsOrderId(null);
+    setIsCreateOpen(false);
+    setAuthError(message);
   }
 
   useEffect(() => {
@@ -191,19 +286,18 @@ export default function App() {
       try {
         setIsLoading(true);
         setError(null);
-        await loadDashboardData(accessToken, controller.signal);
+        await refreshDashboardAndDetail(
+          accessToken,
+          selectedOrderId,
+          controller.signal
+        );
       } catch (fetchError) {
         if (controller.signal.aborted) {
           return;
         }
 
         if (fetchError instanceof Error && fetchError.message === "AUTH_REQUIRED") {
-          persistSession(null);
-          setSession(null);
-          setOrders([]);
-          setUsers([]);
-          setLifecycle(null);
-          setAuthError("Your session expired. Sign in again.");
+          handleAuthExpired();
           return;
         }
 
@@ -223,6 +317,53 @@ export default function App() {
 
     return () => controller.abort();
   }, [session]);
+
+  useEffect(() => {
+    if (!session || !selectedOrderId) {
+      setSelectedOrderDetail(null);
+      setDetailError(null);
+      setIsDetailLoading(false);
+      return;
+    }
+
+    const accessToken = session.access_token;
+    const activeOrderId = selectedOrderId;
+    const controller = new AbortController();
+
+    async function bootstrapDetail() {
+      try {
+        setIsDetailLoading(true);
+        setDetailError(null);
+        const detail = await loadOrderDetail(activeOrderId, accessToken, controller.signal);
+        setSelectedOrderDetail(detail);
+        setCommentDraft("");
+      } catch (fetchError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (fetchError instanceof Error && fetchError.message === "AUTH_REQUIRED") {
+          handleAuthExpired();
+          return;
+        }
+
+        setSelectedOrderDetail(null);
+        setDetailError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Unable to load order detail."
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsDetailLoading(false);
+        }
+      }
+    }
+
+    void bootstrapDetail();
+
+    return () => controller.abort();
+  }, [selectedOrderId, session]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -314,10 +455,10 @@ export default function App() {
 
   function sortIndicator(field: SortField) {
     if (sortField !== field) {
-      return "△";
+      return "^";
     }
 
-    return sortDirection === "asc" ? "▲" : "▼";
+    return sortDirection === "asc" ? "^" : "v";
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -356,6 +497,10 @@ export default function App() {
     setOrders([]);
     setUsers([]);
     setLifecycle(null);
+    setSelectedOrderId(null);
+    setSelectedOrderDetail(null);
+    setDetailError(null);
+    setCommentDraft("");
     setError(null);
     setActionError(null);
     setIsCreateOpen(false);
@@ -393,11 +538,10 @@ export default function App() {
 
       setFormState({ title: "", description: "" });
       setIsCreateOpen(false);
-      await loadDashboardData(session.access_token);
+      await refreshDashboardAndDetail(session.access_token);
     } catch (submitError) {
       if (submitError instanceof Error && submitError.message === "AUTH_REQUIRED") {
-        handleLogout();
-        setAuthError("Your session expired. Sign in again.");
+        handleAuthExpired();
         return;
       }
 
@@ -439,11 +583,10 @@ export default function App() {
       });
 
       setOpenActionsOrderId(null);
-      await loadDashboardData(session.access_token);
+      await refreshDashboardAndDetail(session.access_token, orderId);
     } catch (submitError) {
       if (submitError instanceof Error && submitError.message === "AUTH_REQUIRED") {
-        handleLogout();
-        setAuthError("Your session expired. Sign in again.");
+        handleAuthExpired();
         return;
       }
 
@@ -451,6 +594,57 @@ export default function App() {
         submitError instanceof Error
           ? submitError.message
           : "Status transition failed."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleAddComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!session) {
+      setActionError("Sign in again to add comments.");
+      return;
+    }
+
+    if (!selectedOrderId) {
+      setActionError("Select an order before adding a comment.");
+      return;
+    }
+
+    if (!commentDraft.trim()) {
+      setActionError("Comment cannot be empty.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setActionError(null);
+
+      await readJson(`/orders/${selectedOrderId}/comments`, session.access_token, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          author_id: session.user.id,
+          body: commentDraft.trim()
+        })
+      });
+
+      setCommentDraft("");
+      await refreshDashboardAndDetail(session.access_token, selectedOrderId);
+    } catch (submitError) {
+      if (submitError instanceof Error && submitError.message === "AUTH_REQUIRED") {
+        handleAuthExpired();
+        return;
+      }
+
+      setActionError(
+        submitError instanceof Error
+          ? submitError.message
+          : "Comment submission failed."
       );
     } finally {
       setIsSubmitting(false);
@@ -559,7 +753,7 @@ export default function App() {
           </article>
           <article className="hero-card">
             <span>Signed in</span>
-            <strong>{session.user.name} · {session.user.role}</strong>
+            <strong>{session.user.name} | {session.user.role}</strong>
           </article>
           <article className="hero-card">
             <span>Live endpoint</span>
@@ -766,7 +960,11 @@ export default function App() {
                       const nextStatuses = lifecycle?.allowed_transitions[order.status] ?? [];
 
                       return (
-                        <tr key={order.id}>
+                        <tr
+                          className={selectedOrderId === order.id ? "is-selected" : ""}
+                          key={order.id}
+                          onClick={() => setSelectedOrderId(order.id)}
+                        >
                           <td className="cell-code">{order.code}</td>
                           <td className="cell-title">{order.title}</td>
                           <td className="cell-customer">{order.customer_name}</td>
@@ -820,6 +1018,134 @@ export default function App() {
               </table>
             </div>
           ) : null}
+
+          <section className="detail-inspector">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Order inspector</p>
+                <h3>Comments and workflow history</h3>
+              </div>
+            </div>
+
+            {isDetailLoading ? (
+              <div className="feedback-card feedback-sync">
+                <span className="feedback-eyebrow">Inspector</span>
+                <strong>Loading order detail</strong>
+                <p>Fetching comments, history, and the latest description.</p>
+              </div>
+            ) : null}
+
+            {!isDetailLoading && detailError ? (
+              <div className="feedback-card feedback-error">
+                <span className="feedback-eyebrow">Inspector</span>
+                <strong>Unable to load selected order.</strong>
+                <p>{detailError}</p>
+              </div>
+            ) : null}
+
+            {!isDetailLoading && !detailError && selectedOrderDetail ? (
+              <div className="inspector-grid">
+                <article className="inspector-card inspector-summary">
+                  <div className="inspector-topline">
+                    <span className="cell-code">{selectedOrderDetail.code}</span>
+                    <span className={`pill ${statusTone(selectedOrderDetail.status)}`}>
+                      {statusLabels[selectedOrderDetail.status]}
+                    </span>
+                  </div>
+                  <h4>{selectedOrderDetail.title}</h4>
+                  <p>{selectedOrderDetail.description || "No description provided yet."}</p>
+
+                  <div className="inspector-meta">
+                    <div>
+                      <span>Customer</span>
+                      <strong>{selectedOrderDetail.customer_name}</strong>
+                    </div>
+                    <div>
+                      <span>Updated</span>
+                      <strong>{formatTimestamp(selectedOrderDetail.updated_at)}</strong>
+                    </div>
+                  </div>
+                </article>
+
+                <article className="inspector-card">
+                  <div className="inspector-section-heading">
+                    <div>
+                      <p className="eyebrow">History</p>
+                      <h4>Recent status movement</h4>
+                    </div>
+                    <span className="inspector-count">{selectedOrderDetail.history.length}</span>
+                  </div>
+
+                  {selectedOrderDetail.history.length === 0 ? (
+                    <div className="mini-empty">No workflow events recorded yet.</div>
+                  ) : (
+                    <div className="timeline-list">
+                      {[...selectedOrderDetail.history].reverse().map((event) => (
+                        <article className="timeline-item" key={event.id}>
+                          <strong>{historySummary(event)}</strong>
+                          <span>
+                            {event.changed_by.name} | {formatTimestamp(event.changed_at)}
+                          </span>
+                          <p>{event.reason}</p>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </article>
+
+                <article className="inspector-card">
+                  <div className="inspector-section-heading">
+                    <div>
+                      <p className="eyebrow">Comments</p>
+                      <h4>Operator notes</h4>
+                    </div>
+                    <span className="inspector-count">{selectedOrderDetail.comments.length}</span>
+                  </div>
+
+                  <form className="comment-form" onSubmit={handleAddComment}>
+                    <label className="field field-wide">
+                      <span>Add comment</span>
+                      <textarea
+                        value={commentDraft}
+                        onChange={(event) => setCommentDraft(event.target.value)}
+                        placeholder="Leave a note for the next operator."
+                        rows={3}
+                      />
+                    </label>
+                    <button
+                      className="primary-action"
+                      disabled={isSubmitting || commentDraft.trim().length === 0}
+                      type="submit"
+                    >
+                      {isSubmitting ? "Posting..." : "Post comment"}
+                    </button>
+                  </form>
+
+                  {selectedOrderDetail.comments.length === 0 ? (
+                    <div className="mini-empty">No comments yet for this order.</div>
+                  ) : (
+                    <div className="timeline-list">
+                      {[...selectedOrderDetail.comments].reverse().map((comment) => (
+                        <article className="timeline-item" key={comment.id}>
+                          <strong>{comment.author.name}</strong>
+                          <span>{formatTimestamp(comment.created_at)}</span>
+                          <p>{comment.body}</p>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </article>
+              </div>
+            ) : null}
+
+            {!isDetailLoading && !detailError && !selectedOrderDetail ? (
+              <div className="feedback-card feedback-sync">
+                <span className="feedback-eyebrow">Inspector</span>
+                <strong>Select an order to inspect.</strong>
+                <p>Choose any row to review comments, history, and description.</p>
+              </div>
+            ) : null}
+          </section>
         </section>
       </section>
     </main>

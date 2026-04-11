@@ -362,6 +362,11 @@ a {
 
 .orders-table tbody tr:hover {
   background: rgba(79, 124, 255, 0.05);
+  cursor: pointer;
+}
+
+.orders-table tbody tr.is-selected {
+  background: rgba(79, 124, 255, 0.1);
 }
 
 .cell-code {
@@ -386,6 +391,106 @@ a {
 
 .cell-actions {
   text-align: right;
+}
+
+.detail-inspector {
+  display: grid;
+  gap: 14px;
+}
+
+.inspector-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.inspector-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(10, 19, 36, 0.78);
+  border-radius: 22px;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.inspector-summary h4,
+.inspector-card h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.inspector-summary p,
+.timeline-item p {
+  margin: 0;
+  color: #b9c7d8;
+}
+
+.inspector-topline,
+.inspector-section-heading,
+.inspector-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.inspector-meta {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.inspector-meta div,
+.inspector-section-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.inspector-meta span,
+.inspector-count {
+  color: #8ea6c4;
+  font-size: 0.8rem;
+}
+
+.inspector-count {
+  min-width: 32px;
+  text-align: right;
+  font-weight: 700;
+}
+
+.timeline-list {
+  display: grid;
+  gap: 10px;
+}
+
+.timeline-item {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.timeline-item strong {
+  color: #eef4fc;
+}
+
+.timeline-item span {
+  color: #8ea6c4;
+  font-size: 0.8rem;
+}
+
+.comment-form {
+  display: grid;
+  gap: 12px;
+}
+
+.mini-empty {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  color: #9fb1c8;
 }
 
 .column-sort {
@@ -686,6 +791,10 @@ a {
   .toolbar-actions {
     flex-direction: column;
     align-items: start;
+  }
+
+  .inspector-grid {
+    grid-template-columns: 1fr;
   }
 
   .primary-action {
