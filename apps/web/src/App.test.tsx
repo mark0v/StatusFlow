@@ -323,6 +323,14 @@ function installFetchMock(initialOrders = baseOrders()) {
   return fetchMock;
 }
 
+function countRequests(fetchMock: ReturnType<typeof installFetchMock>, path: string, method = "GET") {
+  return fetchMock.mock.calls.filter(([input, init]) => {
+    const requestUrl = typeof input === "string" ? input : input.toString();
+    const requestPath = requestUrl.replace("http://localhost:8000", "");
+    return requestPath === path && (init?.method ?? "GET") === method;
+  }).length;
+}
+
 function getStatusCard(label: string) {
   const summaryStrip = document.querySelector(".summary-strip");
 
@@ -341,8 +349,10 @@ function getStatusCard(label: string) {
 }
 
 describe("App", () => {
+  let fetchMock: ReturnType<typeof installFetchMock>;
+
   beforeEach(() => {
-    installFetchMock();
+    fetchMock = installFetchMock();
     window.localStorage.clear();
   });
 
@@ -386,6 +396,34 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.queryByLabelText("Cancelled")).not.toBeInTheDocument();
     });
+  });
+
+  it("filters the visible queue with the search field", async () => {
+    const user = await signIn();
+
+    await user.type(screen.getByLabelText("Search queue"), "shipment");
+
+    expect(screen.getByRole("cell", { name: "Prepare approved shipment" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "Replace display unit" })).not.toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 3 orders")).toBeInTheDocument();
+  });
+
+  it("refreshes the queue on demand and surfaces snapshot metadata", async () => {
+    const user = await signIn();
+
+    expect(screen.getByText("Queue snapshot")).toBeInTheDocument();
+    expect(screen.getByText(/Last sync /)).toBeInTheDocument();
+
+    const ordersRequestsBeforeRefresh = countRequests(fetchMock, "/orders");
+
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => {
+      expect(countRequests(fetchMock, "/orders")).toBeGreaterThan(ordersRequestsBeforeRefresh);
+    });
+
+    expect(screen.getByText("Live queue")).toBeInTheDocument();
+    expect(screen.getByText("Showing 3 of 3 orders")).toBeInTheDocument();
   });
 
   it("creates a new order from the reveal form", async () => {

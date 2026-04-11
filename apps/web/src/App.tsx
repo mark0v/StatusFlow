@@ -173,6 +173,7 @@ export default function App() {
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [lifecycle, setLifecycle] = useState<OrderStatusLifecycle | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(session));
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -187,6 +188,7 @@ export default function App() {
     description: ""
   });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [statusFilter, setStatusFilter] = useState<OrderStatus[]>([]);
@@ -197,6 +199,7 @@ export default function App() {
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
   async function loadDashboardData(accessToken: string, signal?: AbortSignal) {
     const [ordersJson, usersJson, lifecycleJson] = await Promise.all([
@@ -233,6 +236,7 @@ export default function App() {
   ) {
     const dashboard = await loadDashboardData(accessToken, signal);
     applyDashboardData(dashboard);
+    setLastRefreshedAt(new Date().toISOString());
 
     const nextSelectedOrderId =
       preferredSelectedOrderId && dashboard.orders.some((order) => order.id === preferredSelectedOrderId)
@@ -270,6 +274,8 @@ export default function App() {
     setCommentDraft("");
     setOpenActionsOrderId(null);
     setIsCreateOpen(false);
+    setIsRefreshing(false);
+    setLastRefreshedAt(null);
     setAuthError(message);
   }
 
@@ -406,12 +412,23 @@ export default function App() {
   );
 
   const filteredOrders = useMemo(() => {
-    if (statusFilter.length === 0) {
-      return orders;
-    }
+    const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    return orders.filter((order) => statusFilter.includes(order.status));
-  }, [orders, statusFilter]);
+    return orders.filter((order) => {
+      const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status);
+      if (!matchesStatus) {
+        return false;
+      }
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return [order.code, order.title, order.customer_name].some((value) =>
+        value.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [orders, searchQuery, statusFilter]);
 
   const sortedOrders = useMemo(() => {
     const next = [...filteredOrders];
@@ -461,6 +478,31 @@ export default function App() {
     return sortDirection === "asc" ? "^" : "v";
   }
 
+  async function handleRefresh() {
+    if (!session) {
+      return;
+    }
+
+    try {
+      setIsRefreshing(true);
+      setError(null);
+      await refreshDashboardAndDetail(session.access_token, selectedOrderId);
+    } catch (refreshError) {
+      if (refreshError instanceof Error && refreshError.message === "AUTH_REQUIRED") {
+        handleAuthExpired();
+        return;
+      }
+
+      setError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : "Unknown error while refreshing dashboard data."
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
+
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -505,6 +547,9 @@ export default function App() {
     setActionError(null);
     setIsCreateOpen(false);
     setOpenActionsOrderId(null);
+    setSearchQuery("");
+    setIsRefreshing(false);
+    setLastRefreshedAt(null);
   }
 
   async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
@@ -793,8 +838,50 @@ export default function App() {
               <p className="eyebrow">Active queue</p>
               <h3>Review and move orders forward</h3>
             </div>
+            <article aria-live="polite" className="queue-snapshot-card">
+              <span className="queue-snapshot-eyebrow">Queue snapshot</span>
+              <strong>
+                {isLoading
+                  ? "Syncing first snapshot"
+                  : isRefreshing
+                    ? "Refreshing live queue"
+                    : error
+                      ? "Refresh needs attention"
+                      : "Live queue"}
+              </strong>
+              <p>
+                {error
+                  ? error
+                  : lastRefreshedAt
+                    ? `Last sync ${formatTimestamp(lastRefreshedAt)}`
+                    : "Waiting for the first successful sync."}
+              </p>
+              <span className="queue-snapshot-meta">
+                Showing {sortedOrders.length} of {orders.length} orders
+              </span>
+            </article>
+          </div>
+
+          <div className="queue-controls">
+            <label className="field queue-search-field">
+              <span>Search queue</span>
+              <input
+                aria-label="Search queue"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search code, title, or customer"
+                value={searchQuery}
+              />
+            </label>
 
             <div className="toolbar-actions">
+              <button
+                className="secondary-action"
+                disabled={isLoading || isRefreshing}
+                onClick={() => void handleRefresh()}
+                type="button"
+              >
+                {isRefreshing ? "Refreshing..." : "Refresh"}
+              </button>
               <button
                 className="primary-action"
                 onClick={() => setIsCreateOpen((current) => !current)}
@@ -951,8 +1038,8 @@ export default function App() {
                     <tr>
                       <td className="empty-row" colSpan={6}>
                         <span className="empty-row-eyebrow">No matching orders</span>
-                        <strong>Nothing matches the current status filter.</strong>
-                        <p>Clear one or more status selections to bring orders back into view.</p>
+                        <strong>Nothing matches the current queue controls.</strong>
+                        <p>Clear the search or active status filters to bring orders back into view.</p>
                       </td>
                     </tr>
                   ) : (
