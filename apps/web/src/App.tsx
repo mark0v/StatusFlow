@@ -257,6 +257,18 @@ export default function App() {
     try {
       const detail = await loadOrderDetail(nextSelectedOrderId, accessToken, signal);
       setSelectedOrderDetail(detail);
+      setCommentDraft("");
+    } catch (detailFetchError) {
+      if (detailFetchError instanceof Error && detailFetchError.message === "AUTH_REQUIRED") {
+        throw detailFetchError;
+      }
+
+      setSelectedOrderDetail(null);
+      setDetailError(
+        detailFetchError instanceof Error
+          ? detailFetchError.message
+          : "Unable to load order detail."
+      );
     } finally {
       setIsDetailLoading(false);
     }
@@ -426,6 +438,10 @@ export default function App() {
 
     return customer;
   }, [customer, session, users]);
+  const recoveryCandidateOrder = useMemo(
+    () => orders.find((order) => order.id !== selectedOrderId) ?? null,
+    [orders, selectedOrderId]
+  );
 
   const filteredOrders = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -517,6 +533,25 @@ export default function App() {
     } finally {
       setIsRefreshing(false);
     }
+  }
+
+  function handleClearSelection() {
+    setSelectedOrderId(null);
+    setSelectedOrderDetail(null);
+    setDetailError(null);
+    setCommentDraft("");
+  }
+
+  function handleRecoverSelection() {
+    if (!recoveryCandidateOrder) {
+      handleClearSelection();
+      return;
+    }
+
+    setSelectedOrderId(recoveryCandidateOrder.id);
+    setSelectedOrderDetail(null);
+    setDetailError(null);
+    setCommentDraft("");
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -1133,11 +1168,41 @@ export default function App() {
             ) : null}
 
             {!isDetailLoading && detailError ? (
-              <div className="feedback-card feedback-error">
-                <span className="feedback-eyebrow">Inspector</span>
-                <strong>Unable to load selected order.</strong>
-                <p>{detailError}</p>
-              </div>
+              <article className="inspector-card detail-recovery-card">
+                <span className="feedback-eyebrow">Detail state</span>
+                <strong>Selected order is unavailable.</strong>
+                <p>
+                  {detailError}
+                  {" "}
+                  Refresh the queue or pick another order to keep working.
+                </p>
+                <div className="detail-recovery-actions">
+                  <button
+                    className="secondary-action"
+                    disabled={isRefreshing}
+                    onClick={() => void handleRefresh()}
+                    type="button"
+                  >
+                    {isRefreshing ? "Refreshing..." : "Refresh"}
+                  </button>
+                  <button
+                    className="secondary-action"
+                    onClick={handleClearSelection}
+                    type="button"
+                  >
+                    Clear selection
+                  </button>
+                  {recoveryCandidateOrder ? (
+                    <button
+                      className="primary-action"
+                      onClick={handleRecoverSelection}
+                      type="button"
+                    >
+                      Open {recoveryCandidateOrder.code}
+                    </button>
+                  ) : null}
+                </div>
+              </article>
             ) : null}
 
             {!isDetailLoading && !detailError && selectedOrderDetail ? (

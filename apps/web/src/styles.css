@@ -466,6 +466,25 @@ a {
   gap: 14px;
 }
 
+.detail-recovery-card {
+  gap: 12px;
+}
+
+.detail-recovery-card strong,
+.detail-recovery-card p {
+  margin: 0;
+}
+
+.detail-recovery-card p {
+  color: #d8e0eb;
+}
+
+.detail-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .inspector-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
@@ -857,7 +876,8 @@ a {
 
   .queue-controls,
   .table-toolbar,
-  .toolbar-actions {
+  .toolbar-actions,
+  .detail-recovery-actions {
     flex-direction: column;
     align-items: start;
   }

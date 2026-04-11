@@ -123,9 +123,15 @@ function jsonResponse(payload: unknown, init?: ResponseInit) {
   });
 }
 
-function installFetchMock(initialOrders = baseOrders()) {
+function installFetchMock(
+  initialOrders = baseOrders(),
+  options?: {
+    failingDetailIds?: string[];
+  }
+) {
   let orders = [...initialOrders];
   let orderCounter = 1000 + orders.length;
+  const failingDetailIds = new Set(options?.failingDetailIds ?? []);
   const details = new Map<string, OrderDetail>(
     orders.map((order, index) => [
       order.id,
@@ -217,6 +223,10 @@ function installFetchMock(initialOrders = baseOrders()) {
 
     const orderMatch = path.match(/^\/orders\/([^/]+)$/);
     if (orderMatch && method === "GET") {
+      if (failingDetailIds.has(orderMatch[1])) {
+        return jsonResponse({ detail: "Selected order detail is temporarily unavailable." }, { status: 500 });
+      }
+
       const detail = details.get(orderMatch[1]);
       return detail
         ? jsonResponse(detail)
@@ -488,6 +498,33 @@ describe("App", () => {
     expect(screen.getByText("Comments are available in operator mode.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Post comment" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Change status" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the queue usable when selected order detail fails and offers recovery actions", async () => {
+    fetchMock = installFetchMock(baseOrders(), { failingDetailIds: ["order-1"] });
+
+    const user = await signIn();
+
+    await screen.findByText("Selected order is unavailable.");
+    expect(screen.getByText(/API returned 500/)).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Replace display unit" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear selection" }));
+    await screen.findByText("Select an order to inspect.");
+
+    const brokenRowTitle = await screen.findByRole("cell", { name: "Replace display unit" });
+    const brokenRow = brokenRowTitle.closest("tr");
+
+    if (!brokenRow) {
+      throw new Error("Unable to find table row for Replace display unit");
+    }
+
+    await user.click(brokenRow);
+    await screen.findByText("Selected order is unavailable.");
+
+    await user.click(screen.getByRole("button", { name: "Open SF-1002" }));
+    await screen.findByRole("heading", { name: "Verify warranty documents" });
+    expect(screen.queryByText("Selected order is unavailable.")).not.toBeInTheDocument();
   });
 
   it("creates a new order from the reveal form", async () => {
