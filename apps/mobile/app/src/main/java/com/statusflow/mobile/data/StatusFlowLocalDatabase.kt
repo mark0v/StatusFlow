@@ -14,9 +14,6 @@ import androidx.room.Transaction
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import java.util.UUID
 
 @Entity(tableName = "cached_orders")
@@ -303,7 +300,7 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
                 CachedHistoryEntity(
                     id = event.id,
                     orderId = detail.id,
-                    summary = buildHistorySummary(event.from_status, event.to_status),
+                    summary = StatusFlowMobileMapper.buildHistorySummary(event.from_status, event.to_status),
                     reason = event.reason.ifBlank { "No reason provided." },
                     actorName = event.changed_by.name,
                     changedAt = event.changed_at
@@ -325,8 +322,8 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
             gson.fromJson(lifecycle.allowedTransitionsJson, transitionsType)
 
         return MobileDashboardData(
-            orders = orders.map(::mapOrderSummary),
-            users = users.map(::mapUserSummary),
+            orders = orders.map(StatusFlowMobileMapper::mapCachedOrderSummary),
+            users = users.map(StatusFlowMobileMapper::mapCachedUserSummary),
             allowedTransitions = allowedTransitions,
             syncState = readSyncState(isUsingCachedData = true)
         )
@@ -334,18 +331,10 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
 
     suspend fun readOrderDetail(orderId: String): MobileOrderDetail? {
         val order = dao.findOrder(orderId) ?: return null
-        return MobileOrderDetail(
-            id = order.id,
-            code = order.code,
-            title = order.title,
-            description = order.description.ifBlank { "No description provided yet." },
-            customerName = order.customerName,
-            rawStatus = order.rawStatus,
-            statusLabel = statusLabel(order.rawStatus),
-            statusColor = statusColor(order.rawStatus),
-            updatedAtLabel = formatTimestamp(order.updatedAt),
-            comments = dao.listComments(orderId).map(::mapComment),
-            history = dao.listHistory(orderId).map(::mapHistory)
+        return StatusFlowMobileMapper.mapCachedOrderDetail(
+            order = order,
+            comments = dao.listComments(orderId),
+            history = dao.listHistory(orderId)
         )
     }
 
@@ -436,7 +425,9 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
             CachedHistoryEntity(
                 id = "pending-history-${UUID.randomUUID()}",
                 orderId = orderId,
-                summary = currentOrder?.let { "${statusLabel(it.rawStatus)} -> ${statusLabel(toStatus)}" } ?: "Moved to ${statusLabel(toStatus)}",
+                summary = currentOrder?.let {
+                    StatusFlowMobileMapper.buildHistorySummary(it.rawStatus, toStatus)
+                } ?: "Moved to ${StatusFlowMobileMapper.statusLabel(toStatus)}",
                 reason = "Queued while offline.",
                 actorName = actor.name,
                 changedAt = now,
@@ -476,7 +467,7 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
     suspend fun readSyncState(isUsingCachedData: Boolean): MobileSyncState {
         val metadata = dao.getSyncMetadata()
         return MobileSyncState(
-            lastSuccessfulRefreshLabel = metadata?.lastSuccessfulRefreshAt?.let(::formatTimestamp),
+            lastSuccessfulRefreshLabel = metadata?.lastSuccessfulRefreshAt?.let(StatusFlowMobileMapper::formatTimestamp),
             isUsingCachedData = isUsingCachedData,
             pendingMutationCount = dao.countPendingMutations(),
             lastErrorMessage = metadata?.lastErrorMessage
@@ -486,82 +477,6 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
     suspend fun updateSyncError(message: String?) {
         val current = dao.getSyncMetadata() ?: SyncMetadataEntity()
         dao.upsertSyncMetadata(current.copy(lastErrorMessage = message))
-    }
-
-    private fun mapOrderSummary(order: CachedOrderEntity): MobileOrderSummary {
-        return MobileOrderSummary(
-            id = order.id,
-            code = order.code,
-            title = order.title,
-            customerName = order.customerName,
-            rawStatus = order.rawStatus,
-            statusLabel = statusLabel(order.rawStatus),
-            statusColor = statusColor(order.rawStatus),
-            updatedAtLabel = formatTimestamp(order.updatedAt)
-        )
-    }
-
-    private fun mapUserSummary(user: CachedUserEntity): MobileUserSummary {
-        return MobileUserSummary(
-            id = user.id,
-            email = user.email,
-            name = user.name,
-            role = user.role
-        )
-    }
-
-    private fun mapComment(comment: CachedCommentEntity): MobileOrderComment {
-        return MobileOrderComment(
-            id = comment.id,
-            body = comment.body,
-            authorName = comment.authorName,
-            createdAtLabel = formatTimestamp(comment.createdAt)
-        )
-    }
-
-    private fun mapHistory(event: CachedHistoryEntity): MobileOrderHistoryEvent {
-        return MobileOrderHistoryEvent(
-            id = event.id,
-            summary = event.summary,
-            reason = event.reason,
-            actorName = event.actorName,
-            changedAtLabel = formatTimestamp(event.changedAt)
-        )
-    }
-
-    private fun buildHistorySummary(fromStatus: String?, toStatus: String): String {
-        return if (fromStatus == null) {
-            "Created in ${statusLabel(toStatus)}"
-        } else {
-            "${statusLabel(fromStatus)} -> ${statusLabel(toStatus)}"
-        }
-    }
-
-    private fun statusLabel(status: String): String {
-        return status.split("_").joinToString(" ") { token ->
-            token.replaceFirstChar { character -> character.uppercase() }
-        }
-    }
-
-    private fun statusColor(status: String): androidx.compose.ui.graphics.Color {
-        return when (status) {
-            "new" -> androidx.compose.ui.graphics.Color(0xFF92B1F7)
-            "in_review" -> androidx.compose.ui.graphics.Color(0xFFFFD574)
-            "approved" -> androidx.compose.ui.graphics.Color(0xFF8BE0C0)
-            "rejected" -> androidx.compose.ui.graphics.Color(0xFFFF9D9D)
-            "fulfilled" -> androidx.compose.ui.graphics.Color(0xFF9EFADB)
-            "cancelled" -> androidx.compose.ui.graphics.Color(0xFFD2DAE6)
-            else -> androidx.compose.ui.graphics.Color.White
-        }
-    }
-
-    private fun formatTimestamp(value: String): String {
-        return runCatching {
-            val instant = Instant.parse(value)
-            DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
-                .withZone(ZoneId.systemDefault())
-                .format(instant)
-        }.getOrElse { value }
     }
 
     private fun isLocalOrderId(orderId: String): Boolean = orderId.startsWith("local-order-")

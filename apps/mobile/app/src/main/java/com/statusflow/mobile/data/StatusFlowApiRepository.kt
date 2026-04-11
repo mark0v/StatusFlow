@@ -3,10 +3,6 @@ package com.statusflow.mobile.data
 import android.content.Context
 import androidx.compose.ui.graphics.Color
 import java.io.IOException
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import java.util.UUID
 
 data class MobileOrderSummary(
@@ -138,15 +134,8 @@ class StatusFlowApiRepository(
             val lifecycle = apiService.getOrderStatusLifecycle()
             cacheStore.cacheRemoteDashboard(orders, users, lifecycle)
             MobileDashboardData(
-                orders = orders.map(::mapOrder),
-                users = users.map { user ->
-                    MobileUserSummary(
-                        id = user.id,
-                        email = user.email,
-                        name = user.name,
-                        role = user.role
-                    )
-                },
+                orders = orders.map(StatusFlowMobileMapper::mapOrderSummary),
+                users = users.map(StatusFlowMobileMapper::mapUserSummary),
                 allowedTransitions = lifecycle.allowed_transitions,
                 syncState = cacheStore.readSyncState(isUsingCachedData = false)
             )
@@ -182,7 +171,7 @@ class StatusFlowApiRepository(
         return runCatching {
             val detail = apiService.getOrder(orderId)
             cacheStore.cacheRemoteDetail(detail)
-            mapOrderDetail(detail)
+            StatusFlowMobileMapper.mapOrderDetail(detail)
         }.getOrElse { throwable ->
             cacheStore.readOrderDetail(orderId) ?: throw throwable
         }
@@ -195,7 +184,7 @@ class StatusFlowApiRepository(
                 payload = TransitionOrderStatusRequest(
                     changed_by_id = changedById,
                     to_status = toStatus,
-                    reason = "Operator moved order to ${statusLabel(toStatus)}."
+                    reason = "Operator moved order to ${StatusFlowMobileMapper.statusLabel(toStatus)}."
                 )
             )
             cacheStore.cacheRemoteDetail(detail)
@@ -258,7 +247,7 @@ class StatusFlowApiRepository(
                             payload = TransitionOrderStatusRequest(
                                 changed_by_id = mutation.userId.orEmpty(),
                                 to_status = mutation.toStatus.orEmpty(),
-                                reason = "Operator moved order to ${statusLabel(mutation.toStatus.orEmpty())}."
+                                reason = "Operator moved order to ${StatusFlowMobileMapper.statusLabel(mutation.toStatus.orEmpty())}."
                             )
                         )
                         cacheStore.cacheRemoteDetail(detail)
@@ -275,82 +264,5 @@ class StatusFlowApiRepository(
         return cacheStore.readDashboard()?.users?.firstOrNull { it.id == userId }
     }
 
-    private fun mapOrder(response: OrderApiResponse): MobileOrderSummary {
-        return MobileOrderSummary(
-            id = response.id,
-            code = response.code,
-            title = response.title,
-            customerName = response.customer_name,
-            rawStatus = response.status,
-            statusLabel = statusLabel(response.status),
-            statusColor = statusColor(response.status),
-            updatedAtLabel = formatTimestamp(response.updated_at)
-        )
-    }
-
-    private fun mapOrderDetail(response: OrderDetailApiResponse): MobileOrderDetail {
-        return MobileOrderDetail(
-            id = response.id,
-            code = response.code,
-            title = response.title,
-            description = response.description.ifBlank { "No description provided yet." },
-            customerName = response.customer_name,
-            rawStatus = response.status,
-            statusLabel = statusLabel(response.status),
-            statusColor = statusColor(response.status),
-            updatedAtLabel = formatTimestamp(response.updated_at),
-            comments = response.comments.map { comment ->
-                MobileOrderComment(
-                    id = comment.id,
-                    body = comment.body,
-                    authorName = comment.author.name,
-                    createdAtLabel = formatTimestamp(comment.created_at)
-                )
-            },
-            history = response.history.map { event ->
-                MobileOrderHistoryEvent(
-                    id = event.id,
-                    summary = buildHistorySummary(event.from_status, event.to_status),
-                    reason = event.reason.ifBlank { "No reason provided." },
-                    actorName = event.changed_by.name,
-                    changedAtLabel = formatTimestamp(event.changed_at)
-                )
-            }
-        )
-    }
-
-    private fun buildHistorySummary(fromStatus: String?, toStatus: String): String {
-        return if (fromStatus == null) {
-            "Created in ${statusLabel(toStatus)}"
-        } else {
-            "${statusLabel(fromStatus)} -> ${statusLabel(toStatus)}"
-        }
-    }
-
-    private fun statusLabel(status: String): String {
-        return status.split("_").joinToString(" ") { token ->
-            token.replaceFirstChar { character -> character.uppercase() }
-        }
-    }
-
-    private fun statusColor(status: String): Color {
-        return when (status) {
-            "new" -> Color(0xFF92B1F7)
-            "in_review" -> Color(0xFFFFD574)
-            "approved" -> Color(0xFF8BE0C0)
-            "rejected" -> Color(0xFFFF9D9D)
-            "fulfilled" -> Color(0xFF9EFADB)
-            "cancelled" -> Color(0xFFD2DAE6)
-            else -> Color.White
-        }
-    }
-
-    private fun formatTimestamp(value: String): String {
-        return runCatching {
-            val instant = Instant.parse(value)
-            DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
-                .withZone(ZoneId.systemDefault())
-                .format(instant)
-        }.getOrElse { value }
-    }
+    private fun statusLabel(status: String): String = StatusFlowMobileMapper.statusLabel(status)
 }
