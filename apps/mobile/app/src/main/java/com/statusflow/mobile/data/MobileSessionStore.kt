@@ -36,6 +36,11 @@ object MobileSessionStore {
         return session
     }
 
+    fun appContext(): Context {
+        check(initialized) { "MobileSessionStore must be initialized before use." }
+        return appContext
+    }
+
     fun saveSession(nextSession: MobileSession) {
         check(initialized) { "MobileSessionStore must be initialized before use." }
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

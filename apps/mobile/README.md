@@ -15,6 +15,7 @@ The app now includes a Jetpack Compose Android client with:
 
 - sign-in for seeded operator and customer accounts
 - queue and order detail screens against the live API
+- Room-backed queue cache and pending offline mutations
 - create-order flow
 - comments and status changes in operator mode
 - pull-to-refresh, empty states, and device smoke coverage
@@ -76,6 +77,8 @@ The current instrumentation layer covers:
   - `operator@example.com / operator123`
   - `customer@example.com / customer123`
 - the current mobile screen can authenticate, fetch orders, preserve search/filter/sort state, support pull-to-refresh and empty states, and move through a queue-to-detail flow for commenting and status changes
+- dashboard data is cached in local Room storage and used as a fallback when the API is temporarily unavailable
+- create/comment/status mutations now queue locally when the device is offline and attempt reconciliation on the next successful sync
 - the current pass also adds accessibility semantics for primary controls and a graceful fallback when a selected order detail is temporarily unavailable
 - key queue, detail, and composer layouts now collapse more safely on small screens and under larger text scaling
 - the app now also includes a green Compose instrumentation suite for core operator interactions on the emulator

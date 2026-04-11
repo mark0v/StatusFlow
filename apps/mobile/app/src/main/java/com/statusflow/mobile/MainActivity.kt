@@ -62,6 +62,7 @@ import com.statusflow.mobile.data.MobileOrderDetail
 import com.statusflow.mobile.data.MobileOrderSummary
 import com.statusflow.mobile.data.MobileSessionStore
 import com.statusflow.mobile.data.MobileSessionSummary
+import com.statusflow.mobile.data.MobileSyncState
 import com.statusflow.mobile.data.MobileUserSummary
 import com.statusflow.mobile.data.StatusFlowApiRepository
 import com.statusflow.mobile.ui.theme.Amber300
@@ -105,6 +106,7 @@ data class MobileHomeUiState(
     val session: MobileSessionSummary? = null,
     val orders: List<MobileOrderSummary> = emptyList(),
     val users: List<MobileUserSummary> = emptyList(),
+    val syncState: MobileSyncState = MobileSyncState(),
     val allowedTransitions: Map<String, List<String>> = emptyMap(),
     val selectedOrderId: String? = null,
     val selectedOrderDetail: MobileOrderDetail? = null,
@@ -146,7 +148,7 @@ object MobileUiTags {
 }
 
 class MobileHomeViewModel(
-    private val repository: StatusFlowApiRepository = StatusFlowApiRepository()
+    private val repository: StatusFlowApiRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(MobileHomeUiState())
     val uiState: StateFlow<MobileHomeUiState> = _uiState.asStateFlow()
@@ -228,6 +230,7 @@ class MobileHomeViewModel(
                     previousState = currentState,
                     orders = dashboard.orders,
                     users = dashboard.users,
+                    syncState = dashboard.syncState,
                     allowedTransitions = dashboard.allowedTransitions,
                     selectedOrderId = selectedOrderId,
                     selectedOrderDetail = detail
@@ -288,21 +291,30 @@ class MobileHomeViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSubmitting = true, actionMessage = null, errorMessage = null)
             runCatching {
-                repository.createOrder(title, description, customer.id)
+                val result = repository.createOrder(title, description, customer.id)
                 val dashboard = repository.fetchDashboardData()
                 val newestOrder = dashboard.orders.firstOrNull()
                 val detail = newestOrder?.id?.let { orderId -> repository.fetchOrderDetail(orderId) }
-                Triple(dashboard, newestOrder?.id, detail)
-            }.onSuccess { (dashboard, selectedOrderId, detail) ->
+                listOf(result, dashboard, newestOrder?.id, detail)
+            }.onSuccess { (resultAny, dashboardAny, selectedOrderIdAny, detailAny) ->
+                val result = resultAny as com.statusflow.mobile.data.MobileMutationResult
+                val dashboard = dashboardAny as com.statusflow.mobile.data.MobileDashboardData
+                val selectedOrderId = selectedOrderIdAny as String?
+                val detail = detailAny as MobileOrderDetail?
                 _uiState.value = authenticatedState(
                     previousState = state,
                     isSubmitting = false,
                     orders = dashboard.orders,
                     users = dashboard.users,
+                    syncState = dashboard.syncState,
                     allowedTransitions = dashboard.allowedTransitions,
                     selectedOrderId = selectedOrderId,
                     selectedOrderDetail = detail,
-                    actionMessage = if (session.role == "customer") "Order created and queued for operator review." else "Order created successfully."
+                    actionMessage = when {
+                        result.queuedOffline -> "Order saved locally and queued for sync."
+                        session.role == "customer" -> "Order created and queued for operator review."
+                        else -> "Order created successfully."
+                    }
                 )
             }.onFailure { throwable ->
                 if (isUnauthorized(throwable)) {
@@ -334,7 +346,13 @@ class MobileHomeViewModel(
             state = state,
             selectedOrderId = selectedOrderId,
             action = { repository.transitionOrderStatus(selectedOrderId, operator.id, toStatus) },
-            successMessage = { detail -> "Order moved to ${detail.statusLabel}." }
+            successMessage = { detail, queuedOffline ->
+                if (queuedOffline) {
+                    "Status change saved locally and queued for sync."
+                } else {
+                    "Order moved to ${detail.statusLabel}."
+                }
+            }
         )
     }
 
@@ -358,33 +376,36 @@ class MobileHomeViewModel(
             state = state,
             selectedOrderId = selectedOrderId,
             action = { repository.addComment(selectedOrderId, operator.id, body) },
-            successMessage = { "Comment added successfully." }
+            successMessage = { _, queuedOffline ->
+                if (queuedOffline) "Comment saved locally and queued for sync." else "Comment added successfully."
+            }
         )
     }
 
     private fun mutateSelectedOrder(
         state: MobileHomeUiState,
         selectedOrderId: String,
-        action: suspend () -> Unit,
-        successMessage: (MobileOrderDetail) -> String
+        action: suspend () -> com.statusflow.mobile.data.MobileMutationResult,
+        successMessage: (MobileOrderDetail, Boolean) -> String
     ) {
         viewModelScope.launch {
             _uiState.value = state.copy(isSubmitting = true, actionMessage = null, errorMessage = null)
             runCatching {
-                action()
+                val result = action()
                 val dashboard = repository.fetchDashboardData()
                 val detail = repository.fetchOrderDetail(selectedOrderId)
-                dashboard to detail
-            }.onSuccess { (dashboard, detail) ->
+                Triple(result, dashboard, detail)
+            }.onSuccess { (result, dashboard, detail) ->
                 _uiState.value = authenticatedState(
                     previousState = state,
                     isSubmitting = false,
                     orders = dashboard.orders,
                     users = dashboard.users,
+                    syncState = dashboard.syncState,
                     allowedTransitions = dashboard.allowedTransitions,
                     selectedOrderId = selectedOrderId,
                     selectedOrderDetail = detail,
-                    actionMessage = successMessage(detail)
+                    actionMessage = successMessage(detail, result.queuedOffline)
                 )
             }.onFailure { throwable ->
                 if (isUnauthorized(throwable)) {
@@ -400,6 +421,7 @@ class MobileHomeViewModel(
         previousState: MobileHomeUiState,
         orders: List<MobileOrderSummary>,
         users: List<MobileUserSummary>,
+        syncState: MobileSyncState,
         allowedTransitions: Map<String, List<String>>,
         selectedOrderId: String?,
         selectedOrderDetail: MobileOrderDetail?,
@@ -415,6 +437,7 @@ class MobileHomeViewModel(
             session = previousState.session,
             orders = orders,
             users = users,
+            syncState = syncState,
             allowedTransitions = allowedTransitions,
             selectedOrderId = selectedOrderId,
             selectedOrderDetail = selectedOrderDetail,
@@ -431,7 +454,8 @@ class MobileHomeViewModel(
 fun MobileHomeRoute() {
     val viewModel: MobileHomeViewModel = viewModel(factory = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = MobileHomeViewModel() as T
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            MobileHomeViewModel(StatusFlowApiRepository.from(MobileSessionStore.appContext())) as T
     })
     val state by viewModel.uiState.collectAsState()
     MobileHomeScreen(
@@ -528,13 +552,14 @@ fun MobileHomeScreen(
                     ) {
                         item { ScreenTitle(session = state.session, onSignOut = onSignOut) }
                         item {
-                            QueueOverviewCard(
-                                totalOrders = state.orders.size,
-                                visibleOrders = visibleOrders.size,
-                                selectedOrderCode = state.selectedOrderDetail?.code,
-                                activeFilterLabel = statusFilter?.let(::statusLabel)
-                            )
-                        }
+                        QueueOverviewCard(
+                            totalOrders = state.orders.size,
+                            visibleOrders = visibleOrders.size,
+                            selectedOrderCode = state.selectedOrderDetail?.code,
+                            activeFilterLabel = statusFilter?.let(::statusLabel),
+                            syncState = state.syncState
+                        )
+                    }
                         item {
                             ListControlsCard(
                                 searchQuery = searchQuery,
@@ -892,7 +917,8 @@ internal fun QueueOverviewCard(
     totalOrders: Int,
     visibleOrders: Int,
     selectedOrderCode: String?,
-    activeFilterLabel: String?
+    activeFilterLabel: String?,
+    syncState: MobileSyncState = MobileSyncState()
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.QUEUE_OVERVIEW),
@@ -910,7 +936,18 @@ internal fun QueueOverviewCard(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Queue snapshot", style = MaterialTheme.typography.labelLarge, color = Mint400, fontWeight = FontWeight.SemiBold)
-                    Text("Active workload first.", style = MaterialTheme.typography.bodyMedium, color = Slate100)
+                    Text(
+                        when {
+                            syncState.isUsingCachedData && syncState.lastSuccessfulRefreshLabel != null ->
+                                "Cached view from ${syncState.lastSuccessfulRefreshLabel}"
+                            syncState.isUsingCachedData -> "Cached view ready while network is unavailable."
+                            syncState.lastSuccessfulRefreshLabel != null ->
+                                "Last sync ${syncState.lastSuccessfulRefreshLabel}"
+                            else -> "Active workload first."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Slate100
+                    )
                 }
                 if (isCompact) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -934,6 +971,11 @@ internal fun QueueOverviewCard(
                         CompactInfoCard(
                             title = "Filter",
                             value = activeFilterLabel ?: "All",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        CompactInfoCard(
+                            title = "Pending sync",
+                            value = syncState.pendingMutationCount.toString(),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -961,6 +1003,11 @@ internal fun QueueOverviewCard(
                         CompactInfoCard(
                             title = "Filter",
                             value = activeFilterLabel ?: "All",
+                            modifier = Modifier.weight(1f)
+                        )
+                        CompactInfoCard(
+                            title = "Pending sync",
+                            value = syncState.pendingMutationCount.toString(),
                             modifier = Modifier.weight(1f)
                         )
                     }
