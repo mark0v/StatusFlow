@@ -46,6 +46,7 @@ This will:
 - verify the focused activity
 - capture a screenshot and UI hierarchy dump
 - assert key login or queue markers are visible in the rendered screen
+- fail immediately if the Gradle build, install, launch, dump, or screenshot step returns a non-zero exit code
 
 Artifacts are written to:
 

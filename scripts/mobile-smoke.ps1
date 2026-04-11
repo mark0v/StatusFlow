@@ -18,6 +18,7 @@ $resolvedApkPath = Join-Path $repoRoot $ApkPath
 $resolvedOutputDir = Join-Path $repoRoot $OutputDir
 $screenshotPath = Join-Path $resolvedOutputDir "mobile-smoke.png"
 $dumpPath = Join-Path $resolvedOutputDir "mobile-smoke.xml"
+$remoteScreenshotPath = "/sdcard/statusflow-smoke.png"
 
 foreach ($requiredPath in @($adbPath, $gradleWrapper, $jdkRoot)) {
     if (-not (Test-Path $requiredPath)) {
@@ -30,6 +31,22 @@ if ($StartEmulator -and -not (Test-Path $emulatorPath)) {
 }
 
 New-Item -ItemType Directory -Force -Path $resolvedOutputDir | Out-Null
+
+function Invoke-NativeCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [string[]]$ArgumentList = @(),
+
+        [string]$FailureMessage = "Native command failed."
+    )
+
+    & $FilePath @ArgumentList
+    if ($LASTEXITCODE -ne 0) {
+        throw "$FailureMessage Exit code: $LASTEXITCODE"
+    }
+}
 
 function Get-OnlineDeviceCount {
     $lines = & $adbPath devices
@@ -67,7 +84,7 @@ if (-not $SkipBuild) {
         $env:JAVA_HOME = $jdkRoot
         $env:ANDROID_SDK_ROOT = $sdkRoot
         $env:PATH = "$jdkRoot\bin;$sdkRoot\platform-tools;$env:PATH"
-        & $gradleWrapper assembleDebug
+        Invoke-NativeCommand -FilePath $gradleWrapper -ArgumentList @("assembleDebug") -FailureMessage "Gradle debug build failed."
     } finally {
         Pop-Location
     }
@@ -78,10 +95,10 @@ if (-not (Test-Path $resolvedApkPath)) {
 }
 
 Write-Host "Installing APK..."
-& $adbPath install -r $resolvedApkPath | Out-Null
+Invoke-NativeCommand -FilePath $adbPath -ArgumentList @("install", "-r", $resolvedApkPath) -FailureMessage "APK install failed." | Out-Null
 
 Write-Host "Launching mobile app..."
-& $adbPath shell am start -n "com.statusflow.mobile/.MainActivity" | Out-Null
+Invoke-NativeCommand -FilePath $adbPath -ArgumentList @("shell", "am", "start", "-n", "com.statusflow.mobile/.MainActivity") -FailureMessage "App launch failed." | Out-Null
 Start-Sleep -Seconds 8
 
 $windowDump = (& $adbPath shell dumpsys window windows) | Out-String
@@ -103,9 +120,10 @@ if ($currentFocus -notmatch "com\.statusflow\.mobile") {
 }
 
 Write-Host "Dumping UI hierarchy..."
-& $adbPath shell uiautomator dump /sdcard/statusflow-smoke.xml | Out-Null
-& $adbPath pull /sdcard/statusflow-smoke.xml $dumpPath | Out-Null
-& $adbPath exec-out screencap -p > $screenshotPath
+Invoke-NativeCommand -FilePath $adbPath -ArgumentList @("shell", "uiautomator", "dump", "/sdcard/statusflow-smoke.xml") -FailureMessage "UI hierarchy dump failed." | Out-Null
+Invoke-NativeCommand -FilePath $adbPath -ArgumentList @("pull", "/sdcard/statusflow-smoke.xml", $dumpPath) -FailureMessage "Failed to pull UI hierarchy dump." | Out-Null
+Invoke-NativeCommand -FilePath $adbPath -ArgumentList @("shell", "screencap", "-p", $remoteScreenshotPath) -FailureMessage "Screenshot capture failed." | Out-Null
+Invoke-NativeCommand -FilePath $adbPath -ArgumentList @("pull", $remoteScreenshotPath, $screenshotPath) -FailureMessage "Failed to pull screenshot." | Out-Null
 
 $dumpContent = Get-Content -Path $dumpPath -Raw
 $requiredMarkers = @("StatusFlow")
