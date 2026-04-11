@@ -108,6 +108,9 @@ interface StatusFlowCacheDao {
     @Query("DELETE FROM cached_orders WHERE id = :orderId")
     suspend fun deleteOrder(orderId: String)
 
+    @Query("UPDATE cached_comments SET orderId = :remoteOrderId WHERE orderId = :localOrderId")
+    suspend fun reassignCommentsToRemoteOrder(localOrderId: String, remoteOrderId: String)
+
     @Query("SELECT * FROM cached_comments WHERE orderId = :orderId ORDER BY createdAt ASC")
     suspend fun listComments(orderId: String): List<CachedCommentEntity>
 
@@ -131,6 +134,9 @@ interface StatusFlowCacheDao {
 
     @Query("DELETE FROM cached_history WHERE orderId = :orderId AND isPendingLocal = 0")
     suspend fun deleteRemoteBackedHistory(orderId: String)
+
+    @Query("UPDATE cached_history SET orderId = :remoteOrderId WHERE orderId = :localOrderId")
+    suspend fun reassignHistoryToRemoteOrder(localOrderId: String, remoteOrderId: String)
 
     @Query("SELECT * FROM cached_users ORDER BY name ASC")
     suspend fun listUsers(): List<CachedUserEntity>
@@ -158,6 +164,9 @@ interface StatusFlowCacheDao {
 
     @Query("DELETE FROM pending_mutations WHERE id = :id")
     suspend fun deletePendingMutation(id: String)
+
+    @Query("UPDATE pending_mutations SET orderId = :remoteOrderId, localOrderId = NULL WHERE orderId = :localOrderId OR localOrderId = :localOrderId")
+    suspend fun reassignPendingMutationsToRemoteOrder(localOrderId: String, remoteOrderId: String)
 
     @Query("SELECT * FROM sync_metadata WHERE id = 0 LIMIT 1")
     suspend fun getSyncMetadata(): SyncMetadataEntity?
@@ -311,7 +320,6 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
             return null
         }
 
-        val statusesType = object : TypeToken<List<String>>() {}.type
         val transitionsType = object : TypeToken<Map<String, List<String>>>() {}.type
         val allowedTransitions: Map<String, List<String>> =
             gson.fromJson(lifecycle.allowedTransitionsJson, transitionsType)
@@ -384,6 +392,7 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
 
     suspend fun enqueueComment(orderId: String, author: MobileUserSummary, body: String) {
         val now = Instant.now().toString()
+        val localOrderId = orderId.takeIf(::isLocalOrderId)
         dao.upsertComment(
             CachedCommentEntity(
                 id = "pending-comment-${UUID.randomUUID()}",
@@ -399,7 +408,7 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
                 id = UUID.randomUUID().toString(),
                 type = "add_comment",
                 orderId = orderId,
-                localOrderId = null,
+                localOrderId = localOrderId,
                 userId = author.id,
                 title = null,
                 description = null,
@@ -412,6 +421,7 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
 
     suspend fun enqueueStatusTransition(orderId: String, actor: MobileUserSummary, toStatus: String) {
         val now = Instant.now().toString()
+        val localOrderId = orderId.takeIf(::isLocalOrderId)
         val currentOrder = dao.findOrder(orderId)
         if (currentOrder != null) {
             dao.upsertOrder(
@@ -438,7 +448,7 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
                 id = UUID.randomUUID().toString(),
                 type = "transition_status",
                 orderId = orderId,
-                localOrderId = null,
+                localOrderId = localOrderId,
                 userId = actor.id,
                 title = null,
                 description = null,
@@ -456,6 +466,9 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
     }
 
     suspend fun replaceLocalOrder(localOrderId: String, detail: OrderDetailApiResponse) {
+        dao.reassignCommentsToRemoteOrder(localOrderId, detail.id)
+        dao.reassignHistoryToRemoteOrder(localOrderId, detail.id)
+        dao.reassignPendingMutationsToRemoteOrder(localOrderId, detail.id)
         dao.deleteOrder(localOrderId)
         cacheRemoteDetail(detail)
     }
@@ -550,4 +563,6 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
                 .format(instant)
         }.getOrElse { value }
     }
+
+    private fun isLocalOrderId(orderId: String): Boolean = orderId.startsWith("local-order-")
 }

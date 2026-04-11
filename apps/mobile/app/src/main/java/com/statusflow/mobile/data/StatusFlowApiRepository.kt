@@ -2,7 +2,6 @@ package com.statusflow.mobile.data
 
 import android.content.Context
 import androidx.compose.ui.graphics.Color
-import retrofit2.HttpException
 import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
