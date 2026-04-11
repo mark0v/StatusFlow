@@ -1,173 +1,42 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import statusFlowLogo from "./assets/statusflow-logo.svg";
-
-type OrderStatus =
-  | "new"
-  | "in_review"
-  | "approved"
-  | "rejected"
-  | "fulfilled"
-  | "cancelled";
-
-type OrderCard = {
-  id: string;
-  code: string;
-  title: string;
-  customer_name: string;
-  status: OrderStatus;
-  updated_at: string;
-};
-
-type OrderComment = {
-  id: string;
-  body: string;
-  created_at: string;
-  author: UserSummary;
-};
-
-type OrderHistoryEvent = {
-  id: string;
-  from_status: OrderStatus | null;
-  to_status: OrderStatus;
-  reason: string;
-  changed_at: string;
-  changed_by: UserSummary;
-};
-
-type OrderDetail = OrderCard & {
-  description: string;
-  comments: OrderComment[];
-  history: OrderHistoryEvent[];
-};
-
-type UserSummary = {
-  id: string;
-  email: string;
-  name: string;
-  role: "customer" | "operator";
-};
-
-type AuthSession = {
-  access_token: string;
-  token_type: "bearer";
-  expires_in_seconds: number;
-  user: UserSummary;
-};
-
-type OrderStatusLifecycle = {
-  statuses: OrderStatus[];
-  allowed_transitions: Record<OrderStatus, OrderStatus[]>;
-};
-
-type CreateOrderFormState = {
-  title: string;
-  description: string;
-};
-
-type SortField = "updated_at" | "status" | "customer_name";
-type SortDirection = "asc" | "desc";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-const SESSION_STORAGE_KEY = "statusflow.web.session";
-
-const statusLabels: Record<OrderStatus, string> = {
-  new: "New",
-  in_review: "In review",
-  approved: "Approved",
-  rejected: "Rejected",
-  fulfilled: "Fulfilled",
-  cancelled: "Cancelled"
-};
-
-const orderedStatuses: OrderStatus[] = [
-  "new",
-  "in_review",
-  "approved",
-  "rejected",
-  "fulfilled",
-  "cancelled"
-];
-
-const statusTone = (status: OrderStatus) => {
-  switch (status) {
-    case "new":
-      return "tone-new";
-    case "in_review":
-      return "tone-review";
-    case "approved":
-      return "tone-approved";
-    case "rejected":
-      return "tone-rejected";
-    case "fulfilled":
-      return "tone-fulfilled";
-    case "cancelled":
-      return "tone-cancelled";
-    default:
-      return "tone-default";
-  }
-};
-
-const formatTimestamp = (value: string) =>
-  new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(value));
-
-const historySummary = (event: OrderHistoryEvent) =>
-  event.from_status
-    ? `${statusLabels[event.from_status]} -> ${statusLabels[event.to_status]}`
-    : `Created in ${statusLabels[event.to_status]}`;
-
-function readStoredSession() {
-  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
-
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(raw) as AuthSession;
-  } catch {
-    window.localStorage.removeItem(SESSION_STORAGE_KEY);
-    return null;
-  }
-}
-
-function persistSession(session: AuthSession | null) {
-  if (session) {
-    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-    return;
-  }
-
-  window.localStorage.removeItem(SESSION_STORAGE_KEY);
-}
-
-async function readJson<T>(path: string, token?: string, init?: RequestInit) {
-  const headers = new Headers(init?.headers ?? {});
-
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers
-  });
-
-  if (!response.ok) {
-    const message =
-      response.status === 401
-        ? "AUTH_REQUIRED"
-        : response.status === 403
-          ? "FORBIDDEN"
-          : `API returned ${response.status}`;
-    throw new Error(message);
-  }
-
-  return (await response.json()) as T;
-}
+import {
+  API_BASE_URL,
+  AUTH_REQUIRED_ERROR,
+  addOrderComment,
+  createOrder,
+  login,
+  transitionOrderStatus
+} from "./data/webApi";
+import { persistSession, readStoredSession } from "./data/webSessionStore";
+import {
+  filterOrders,
+  getGroupedStatuses,
+  resolveCurrentCustomer,
+  resolveRecoveryCandidateOrder,
+  sortOrders,
+  syncDashboardAndDetail,
+  syncOrderDetail
+} from "./data/webSyncStore";
+import {
+  formatTimestamp,
+  historySummary,
+  orderedStatuses,
+  statusLabels,
+  statusTone,
+  type AuthSession,
+  type CreateOrderFormState,
+  type OrderCard,
+  type OrderDetail,
+  type OrderStatus,
+  type OrderStatusLifecycle,
+  type SortDirection,
+  type SortField,
+  type UserSummary
+} from "./data/webTypes";
 
 export default function App() {
+  const skipNextDetailBootstrapOrderId = useRef<string | null>(null);
   const [session, setSession] = useState<AuthSession | null>(() => readStoredSession());
   const [orders, setOrders] = useState<OrderCard[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
@@ -201,21 +70,7 @@ export default function App() {
   const [commentDraft, setCommentDraft] = useState("");
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
-  async function loadDashboardData(accessToken: string, signal?: AbortSignal) {
-    const [ordersJson, usersJson, lifecycleJson] = await Promise.all([
-      readJson<OrderCard[]>("/orders", accessToken, { signal }),
-      readJson<UserSummary[]>("/users", accessToken, { signal }),
-      readJson<OrderStatusLifecycle>("/order-status-lifecycle", accessToken, { signal })
-    ]);
-
-    return {
-      orders: ordersJson,
-      users: usersJson,
-      lifecycle: lifecycleJson
-    };
-  }
-
-  function applyDashboardData(data: {
+  function applyDashboardState(data: {
     orders: OrderCard[];
     users: UserSummary[];
     lifecycle: OrderStatusLifecycle;
@@ -225,8 +80,13 @@ export default function App() {
     setLifecycle(data.lifecycle);
   }
 
-  async function loadOrderDetail(orderId: string, accessToken: string, signal?: AbortSignal) {
-    return readJson<OrderDetail>(`/orders/${orderId}`, accessToken, { signal });
+  function applyDetailState(nextDetail: OrderDetail | null, nextDetailError: string | null) {
+    setSelectedOrderDetail(nextDetail);
+    setDetailError(nextDetailError);
+
+    if (nextDetail) {
+      setCommentDraft("");
+    }
   }
 
   async function refreshDashboardAndDetail(
@@ -234,41 +94,14 @@ export default function App() {
     preferredSelectedOrderId?: string | null,
     signal?: AbortSignal
   ) {
-    const dashboard = await loadDashboardData(accessToken, signal);
-    applyDashboardData(dashboard);
-    setLastRefreshedAt(new Date().toISOString());
-
-    const nextSelectedOrderId =
-      preferredSelectedOrderId && dashboard.orders.some((order) => order.id === preferredSelectedOrderId)
-        ? preferredSelectedOrderId
-        : dashboard.orders[0]?.id ?? null;
-
-    setSelectedOrderId(nextSelectedOrderId);
-
-    if (!nextSelectedOrderId) {
-      setSelectedOrderDetail(null);
-      setDetailError(null);
-      setIsDetailLoading(false);
-      return;
-    }
-
     setIsDetailLoading(true);
-    setDetailError(null);
     try {
-      const detail = await loadOrderDetail(nextSelectedOrderId, accessToken, signal);
-      setSelectedOrderDetail(detail);
-      setCommentDraft("");
-    } catch (detailFetchError) {
-      if (detailFetchError instanceof Error && detailFetchError.message === "AUTH_REQUIRED") {
-        throw detailFetchError;
-      }
-
-      setSelectedOrderDetail(null);
-      setDetailError(
-        detailFetchError instanceof Error
-          ? detailFetchError.message
-          : "Unable to load order detail."
-      );
+      const nextState = await syncDashboardAndDetail(accessToken, preferredSelectedOrderId, signal);
+      applyDashboardState(nextState.dashboard);
+      setLastRefreshedAt(nextState.lastRefreshedAt);
+      skipNextDetailBootstrapOrderId.current = nextState.selectedOrderId;
+      setSelectedOrderId(nextState.selectedOrderId);
+      applyDetailState(nextState.selectedOrderDetail, nextState.detailError);
     } finally {
       setIsDetailLoading(false);
     }
@@ -314,7 +147,7 @@ export default function App() {
           return;
         }
 
-        if (fetchError instanceof Error && fetchError.message === "AUTH_REQUIRED") {
+        if (fetchError instanceof Error && fetchError.message === AUTH_REQUIRED_ERROR) {
           handleAuthExpired();
           return;
         }
@@ -348,29 +181,27 @@ export default function App() {
     const activeOrderId = selectedOrderId;
     const controller = new AbortController();
 
+    if (skipNextDetailBootstrapOrderId.current === activeOrderId) {
+      skipNextDetailBootstrapOrderId.current = null;
+      setIsDetailLoading(false);
+      return () => controller.abort();
+    }
+
     async function bootstrapDetail() {
       try {
         setIsDetailLoading(true);
         setDetailError(null);
-        const detail = await loadOrderDetail(activeOrderId, accessToken, controller.signal);
-        setSelectedOrderDetail(detail);
-        setCommentDraft("");
+        const nextDetailState = await syncOrderDetail(accessToken, activeOrderId, controller.signal);
+        applyDetailState(nextDetailState.selectedOrderDetail, nextDetailState.detailError);
       } catch (fetchError) {
         if (controller.signal.aborted) {
           return;
         }
 
-        if (fetchError instanceof Error && fetchError.message === "AUTH_REQUIRED") {
+        if (fetchError instanceof Error && fetchError.message === AUTH_REQUIRED_ERROR) {
           handleAuthExpired();
           return;
         }
-
-        setSelectedOrderDetail(null);
-        setDetailError(
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Unable to load order detail."
-        );
       } finally {
         if (!controller.signal.aborted) {
           setIsDetailLoading(false);
@@ -405,84 +236,26 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
-  const groupedStatuses = useMemo(() => {
-    const counts = orders.reduce<Record<OrderStatus, number>>((accumulator, order) => {
-      accumulator[order.status] = (accumulator[order.status] ?? 0) + 1;
-      return accumulator;
-    }, {} as Record<OrderStatus, number>);
+  const groupedStatuses = useMemo(() => getGroupedStatuses(orders), [orders]);
 
-    return orderedStatuses.map((status) => [status, counts[status] ?? 0] as const);
-  }, [orders]);
-
-  const customer = useMemo(
-    () => users.find((user) => user.role === "customer") ?? null,
-    [users]
-  );
   const operator = useMemo(
     () => users.find((user) => user.role === "operator") ?? null,
     [users]
   );
   const isOperator = session?.user.role === "operator";
-  const currentCustomer = useMemo(() => {
-    if (!session) {
-      return customer;
-    }
-
-    if (session.user.role === "customer") {
-      return (
-        users.find((user) => user.email === session.user.email) ??
-        users.find((user) => user.id === session.user.id) ??
-        customer
-      );
-    }
-
-    return customer;
-  }, [customer, session, users]);
+  const currentCustomer = useMemo(() => resolveCurrentCustomer(users, session), [session, users]);
   const recoveryCandidateOrder = useMemo(
-    () => orders.find((order) => order.id !== selectedOrderId) ?? null,
+    () => resolveRecoveryCandidateOrder(orders, selectedOrderId),
     [orders, selectedOrderId]
   );
-
-  const filteredOrders = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-
-    return orders.filter((order) => {
-      const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status);
-      if (!matchesStatus) {
-        return false;
-      }
-
-      if (!normalizedQuery) {
-        return true;
-      }
-
-      return [order.code, order.title, order.customer_name].some((value) =>
-        value.toLowerCase().includes(normalizedQuery)
-      );
-    });
-  }, [orders, searchQuery, statusFilter]);
-
-  const sortedOrders = useMemo(() => {
-    const next = [...filteredOrders];
-
-    next.sort((left, right) => {
-      if (sortField === "status") {
-        const result = statusLabels[left.status].localeCompare(statusLabels[right.status]);
-        return sortDirection === "asc" ? result : -result;
-      }
-
-      if (sortField === "customer_name") {
-        const result = left.customer_name.localeCompare(right.customer_name);
-        return sortDirection === "asc" ? result : -result;
-      }
-
-      const result =
-        new Date(left.updated_at).getTime() - new Date(right.updated_at).getTime();
-      return sortDirection === "asc" ? result : -result;
-    });
-
-    return next;
-  }, [filteredOrders, sortDirection, sortField]);
+  const filteredOrders = useMemo(
+    () => filterOrders(orders, searchQuery, statusFilter),
+    [orders, searchQuery, statusFilter]
+  );
+  const sortedOrders = useMemo(
+    () => sortOrders(filteredOrders, sortField, sortDirection),
+    [filteredOrders, sortDirection, sortField]
+  );
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -520,7 +293,7 @@ export default function App() {
       setError(null);
       await refreshDashboardAndDetail(session.access_token, selectedOrderId);
     } catch (refreshError) {
-      if (refreshError instanceof Error && refreshError.message === "AUTH_REQUIRED") {
+      if (refreshError instanceof Error && refreshError.message === AUTH_REQUIRED_ERROR) {
         handleAuthExpired();
         return;
       }
@@ -561,19 +334,13 @@ export default function App() {
       setIsAuthenticating(true);
       setAuthError(null);
 
-      const nextSession = await readJson<AuthSession>("/auth/login", undefined, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(authForm)
-      });
+      const nextSession = await login(authForm);
 
       persistSession(nextSession);
       setSession(nextSession);
     } catch (loginError) {
       setAuthError(
-        loginError instanceof Error && loginError.message === "AUTH_REQUIRED"
+        loginError instanceof Error && loginError.message === AUTH_REQUIRED_ERROR
           ? "Invalid email or password."
           : loginError instanceof Error
             ? loginError.message
@@ -620,23 +387,17 @@ export default function App() {
       setIsSubmitting(true);
       setActionError(null);
 
-      await readJson("/orders", session.access_token, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          title: formState.title,
-          description: formState.description,
-          customer_id: currentCustomer.id
-        })
+      await createOrder(session.access_token, {
+        title: formState.title,
+        description: formState.description,
+        customer_id: currentCustomer.id
       });
 
       setFormState({ title: "", description: "" });
       setIsCreateOpen(false);
       await refreshDashboardAndDetail(session.access_token);
     } catch (submitError) {
-      if (submitError instanceof Error && submitError.message === "AUTH_REQUIRED") {
+      if (submitError instanceof Error && submitError.message === AUTH_REQUIRED_ERROR) {
         handleAuthExpired();
         return;
       }
@@ -671,22 +432,16 @@ export default function App() {
       setIsSubmitting(true);
       setActionError(null);
 
-      await readJson(`/orders/${orderId}/status-transitions`, session.access_token, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          changed_by_id: operator.id,
-          to_status: toStatus,
-          reason: `Operator moved order to ${statusLabels[toStatus]}.`
-        })
+      await transitionOrderStatus(session.access_token, orderId, {
+        changed_by_id: operator.id,
+        to_status: toStatus,
+        reason: `Operator moved order to ${statusLabels[toStatus]}.`
       });
 
       setOpenActionsOrderId(null);
       await refreshDashboardAndDetail(session.access_token, orderId);
     } catch (submitError) {
-      if (submitError instanceof Error && submitError.message === "AUTH_REQUIRED") {
+      if (submitError instanceof Error && submitError.message === AUTH_REQUIRED_ERROR) {
         handleAuthExpired();
         return;
       }
@@ -728,21 +483,15 @@ export default function App() {
       setIsSubmitting(true);
       setActionError(null);
 
-      await readJson(`/orders/${selectedOrderId}/comments`, session.access_token, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          author_id: session.user.id,
-          body: commentDraft.trim()
-        })
+      await addOrderComment(session.access_token, selectedOrderId, {
+        author_id: session.user.id,
+        body: commentDraft.trim()
       });
 
       setCommentDraft("");
       await refreshDashboardAndDetail(session.access_token, selectedOrderId);
     } catch (submitError) {
-      if (submitError instanceof Error && submitError.message === "AUTH_REQUIRED") {
+      if (submitError instanceof Error && submitError.message === AUTH_REQUIRED_ERROR) {
         handleAuthExpired();
         return;
       }
