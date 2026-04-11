@@ -105,6 +105,9 @@ interface StatusFlowCacheDao {
     @Query("DELETE FROM cached_orders WHERE id = :orderId")
     suspend fun deleteOrder(orderId: String)
 
+    @Query("DELETE FROM cached_orders WHERE id = :orderId AND isPendingLocal = 1")
+    suspend fun deletePendingLocalOrder(orderId: String)
+
     @Query("UPDATE cached_comments SET orderId = :remoteOrderId WHERE orderId = :localOrderId")
     suspend fun reassignCommentsToRemoteOrder(localOrderId: String, remoteOrderId: String)
 
@@ -120,6 +123,12 @@ interface StatusFlowCacheDao {
     @Query("DELETE FROM cached_comments WHERE orderId = :orderId AND isPendingLocal = 0")
     suspend fun deleteRemoteBackedComments(orderId: String)
 
+    @Query("DELETE FROM cached_comments WHERE orderId = :orderId AND isPendingLocal = 1")
+    suspend fun deletePendingCommentsForOrder(orderId: String)
+
+    @Query("DELETE FROM cached_comments WHERE orderId = :orderId AND createdAt = :createdAt AND isPendingLocal = 1")
+    suspend fun deletePendingCommentByTimestamp(orderId: String, createdAt: String)
+
     @Query("SELECT * FROM cached_history WHERE orderId = :orderId ORDER BY changedAt ASC")
     suspend fun listHistory(orderId: String): List<CachedHistoryEntity>
 
@@ -131,6 +140,12 @@ interface StatusFlowCacheDao {
 
     @Query("DELETE FROM cached_history WHERE orderId = :orderId AND isPendingLocal = 0")
     suspend fun deleteRemoteBackedHistory(orderId: String)
+
+    @Query("DELETE FROM cached_history WHERE orderId = :orderId AND isPendingLocal = 1")
+    suspend fun deletePendingHistoryForOrder(orderId: String)
+
+    @Query("DELETE FROM cached_history WHERE orderId = :orderId AND changedAt = :changedAt AND isPendingLocal = 1")
+    suspend fun deletePendingHistoryByTimestamp(orderId: String, changedAt: String)
 
     @Query("UPDATE cached_history SET orderId = :remoteOrderId WHERE orderId = :localOrderId")
     suspend fun reassignHistoryToRemoteOrder(localOrderId: String, remoteOrderId: String)
@@ -161,6 +176,9 @@ interface StatusFlowCacheDao {
 
     @Query("DELETE FROM pending_mutations WHERE id = :id")
     suspend fun deletePendingMutation(id: String)
+
+    @Query("DELETE FROM pending_mutations WHERE (orderId = :orderId OR localOrderId = :orderId) AND id != :exceptId")
+    suspend fun deletePendingMutationsForOrder(orderId: String, exceptId: String)
 
     @Query("UPDATE pending_mutations SET orderId = :remoteOrderId, localOrderId = NULL WHERE orderId = :localOrderId OR localOrderId = :localOrderId")
     suspend fun reassignPendingMutationsToRemoteOrder(localOrderId: String, remoteOrderId: String)
@@ -226,7 +244,10 @@ abstract class StatusFlowLocalDatabase : RoomDatabase() {
                     context.applicationContext,
                     StatusFlowLocalDatabase::class.java,
                     "statusflow-mobile.db"
-                ).build().also { instance = it }
+                )
+                    // Keep schema changes explicit: add a real migration before bumping past v1.
+                    .build()
+                    .also { instance = it }
             }
         }
     }
@@ -454,6 +475,28 @@ class StatusFlowCacheStore(private val dao: StatusFlowCacheDao) {
 
     suspend fun deletePendingMutation(id: String) {
         dao.deletePendingMutation(id)
+    }
+
+    @Transaction
+    suspend fun discardPendingMutation(mutation: PendingMutationEntity) {
+        when (mutation.type) {
+            "create_order" -> {
+                val localOrderId = mutation.localOrderId ?: return
+                dao.deletePendingMutationsForOrder(localOrderId, mutation.id)
+                dao.deletePendingCommentsForOrder(localOrderId)
+                dao.deletePendingHistoryForOrder(localOrderId)
+                dao.deletePendingLocalOrder(localOrderId)
+            }
+            "add_comment" -> {
+                val orderId = mutation.orderId ?: return
+                dao.deletePendingCommentByTimestamp(orderId, mutation.createdAt)
+            }
+            "transition_status" -> {
+                val orderId = mutation.orderId ?: return
+                dao.deletePendingHistoryByTimestamp(orderId, mutation.createdAt)
+            }
+        }
+        dao.deletePendingMutation(mutation.id)
     }
 
     suspend fun replaceLocalOrder(localOrderId: String, detail: OrderDetailApiResponse) {

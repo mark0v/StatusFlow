@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.graphics.Color
 import java.io.IOException
 import java.util.UUID
+import retrofit2.HttpException
 
 data class MobileOrderSummary(
     val id: String,
@@ -70,6 +71,9 @@ data class MobileMutationResult(
     val queuedOffline: Boolean
 )
 
+class MobileSessionExpiredException(cause: Throwable? = null) :
+    IllegalStateException("Your session expired. Sign in again to continue.", cause)
+
 class StatusFlowApiRepository(
     private val apiService: OrderApiService = OrderApiClient.service,
     private val cacheStore: StatusFlowCacheStore
@@ -129,9 +133,9 @@ class StatusFlowApiRepository(
     suspend fun fetchDashboardData(): MobileDashboardData {
         return runCatching {
             flushPendingMutations()
-            val users = apiService.listUsers()
-            val orders = apiService.listOrders()
-            val lifecycle = apiService.getOrderStatusLifecycle()
+            val users = authenticatedCall { apiService.listUsers() }
+            val orders = authenticatedCall { apiService.listOrders() }
+            val lifecycle = authenticatedCall { apiService.getOrderStatusLifecycle() }
             cacheStore.cacheRemoteDashboard(orders, users, lifecycle)
             MobileDashboardData(
                 orders = orders.map(StatusFlowMobileMapper::mapOrderSummary),
@@ -140,6 +144,9 @@ class StatusFlowApiRepository(
                 syncState = cacheStore.readSyncState(isUsingCachedData = false)
             )
         }.getOrElse { throwable ->
+            if (throwable is MobileSessionExpiredException) {
+                throw throwable
+            }
             cacheStore.updateSyncError(throwable.message)
             cacheStore.readDashboard()?.copy(
                 syncState = cacheStore.readSyncState(isUsingCachedData = true)
@@ -149,13 +156,15 @@ class StatusFlowApiRepository(
 
     suspend fun createOrder(title: String, description: String, customerId: String): MobileMutationResult {
         try {
-            val detail = apiService.createOrder(
-                CreateOrderRequest(
-                    title = title,
-                    description = description,
-                    customer_id = customerId
+            val detail = authenticatedCall {
+                apiService.createOrder(
+                    CreateOrderRequest(
+                        title = title,
+                        description = description,
+                        customer_id = customerId
+                    )
                 )
-            )
+            }
             cacheStore.cacheRemoteDetail(detail)
             return MobileMutationResult(queuedOffline = false)
         } catch (exception: IOException) {
@@ -169,24 +178,29 @@ class StatusFlowApiRepository(
 
     suspend fun fetchOrderDetail(orderId: String): MobileOrderDetail {
         return runCatching {
-            val detail = apiService.getOrder(orderId)
+            val detail = authenticatedCall { apiService.getOrder(orderId) }
             cacheStore.cacheRemoteDetail(detail)
             StatusFlowMobileMapper.mapOrderDetail(detail)
         }.getOrElse { throwable ->
+            if (throwable is MobileSessionExpiredException) {
+                throw throwable
+            }
             cacheStore.readOrderDetail(orderId) ?: throw throwable
         }
     }
 
     suspend fun transitionOrderStatus(orderId: String, changedById: String, toStatus: String): MobileMutationResult {
         try {
-            val detail = apiService.transitionOrderStatus(
-                orderId = orderId,
-                payload = TransitionOrderStatusRequest(
-                    changed_by_id = changedById,
-                    to_status = toStatus,
-                    reason = "Operator moved order to ${StatusFlowMobileMapper.statusLabel(toStatus)}."
+            val detail = authenticatedCall {
+                apiService.transitionOrderStatus(
+                    orderId = orderId,
+                    payload = TransitionOrderStatusRequest(
+                        changed_by_id = changedById,
+                        to_status = toStatus,
+                        reason = "Operator moved order to ${StatusFlowMobileMapper.statusLabel(toStatus)}."
+                    )
                 )
-            )
+            }
             cacheStore.cacheRemoteDetail(detail)
             return MobileMutationResult(queuedOffline = false)
         } catch (exception: IOException) {
@@ -198,13 +212,15 @@ class StatusFlowApiRepository(
 
     suspend fun addComment(orderId: String, authorId: String, body: String): MobileMutationResult {
         try {
-            val detail = apiService.addComment(
-                orderId = orderId,
-                payload = AddCommentRequest(
-                    author_id = authorId,
-                    body = body
+            val detail = authenticatedCall {
+                apiService.addComment(
+                    orderId = orderId,
+                    payload = AddCommentRequest(
+                        author_id = authorId,
+                        body = body
+                    )
                 )
-            )
+            }
             cacheStore.cacheRemoteDetail(detail)
             return MobileMutationResult(queuedOffline = false)
         } catch (exception: IOException) {
@@ -220,42 +236,65 @@ class StatusFlowApiRepository(
             try {
                 when (mutation.type) {
                     "create_order" -> {
-                        val detail = apiService.createOrder(
-                            CreateOrderRequest(
-                                title = mutation.title.orEmpty(),
-                                description = mutation.description.orEmpty(),
-                                customer_id = mutation.userId.orEmpty()
+                        val detail = authenticatedCall {
+                            apiService.createOrder(
+                                CreateOrderRequest(
+                                    title = mutation.title.orEmpty(),
+                                    description = mutation.description.orEmpty(),
+                                    customer_id = mutation.userId.orEmpty()
+                                )
                             )
-                        )
+                        }
                         mutation.localOrderId?.let { cacheStore.replaceLocalOrder(it, detail) }
                     }
                     "add_comment" -> {
                         val orderId = mutation.orderId ?: return@forEach
-                        val detail = apiService.addComment(
-                            orderId = orderId,
-                            payload = AddCommentRequest(
-                                author_id = mutation.userId.orEmpty(),
-                                body = mutation.body.orEmpty()
+                        val detail = authenticatedCall {
+                            apiService.addComment(
+                                orderId = orderId,
+                                payload = AddCommentRequest(
+                                    author_id = mutation.userId.orEmpty(),
+                                    body = mutation.body.orEmpty()
+                                )
                             )
-                        )
+                        }
                         cacheStore.cacheRemoteDetail(detail)
                     }
                     "transition_status" -> {
                         val orderId = mutation.orderId ?: return@forEach
-                        val detail = apiService.transitionOrderStatus(
-                            orderId = orderId,
-                            payload = TransitionOrderStatusRequest(
-                                changed_by_id = mutation.userId.orEmpty(),
-                                to_status = mutation.toStatus.orEmpty(),
-                                reason = "Operator moved order to ${StatusFlowMobileMapper.statusLabel(mutation.toStatus.orEmpty())}."
+                        val detail = authenticatedCall {
+                            apiService.transitionOrderStatus(
+                                orderId = orderId,
+                                payload = TransitionOrderStatusRequest(
+                                    changed_by_id = mutation.userId.orEmpty(),
+                                    to_status = mutation.toStatus.orEmpty(),
+                                    reason = "Operator moved order to ${StatusFlowMobileMapper.statusLabel(mutation.toStatus.orEmpty())}."
+                                )
                             )
-                        )
+                        }
                         cacheStore.cacheRemoteDetail(detail)
                     }
                 }
                 cacheStore.deletePendingMutation(mutation.id)
-            } catch (_: IOException) {
+            } catch (exception: IOException) {
+                cacheStore.updateSyncError("Offline sync paused until the connection returns.")
                 return
+            } catch (exception: HttpException) {
+                when {
+                    exception.code() in listOf(401, 403) -> throw MobileSessionExpiredException(exception)
+                    exception.code() in listOf(400, 404, 409, 422) -> {
+                        cacheStore.discardPendingMutation(mutation)
+                        cacheStore.updateSyncError(buildMutationConflictMessage(mutation, exception.code()))
+                    }
+                    exception.code() >= 500 -> {
+                        cacheStore.updateSyncError("Server sync is temporarily unavailable. Pending changes will retry.")
+                        return
+                    }
+                    else -> {
+                        cacheStore.updateSyncError("Sync paused after an unexpected ${exception.code()} response.")
+                        return
+                    }
+                }
             }
         }
     }
@@ -264,5 +303,24 @@ class StatusFlowApiRepository(
         return cacheStore.readDashboard()?.users?.firstOrNull { it.id == userId }
     }
 
-    private fun statusLabel(status: String): String = StatusFlowMobileMapper.statusLabel(status)
+    private suspend fun <T> authenticatedCall(block: suspend () -> T): T {
+        try {
+            return block()
+        } catch (exception: HttpException) {
+            if (exception.code() in listOf(401, 403)) {
+                throw MobileSessionExpiredException(exception)
+            }
+            throw exception
+        }
+    }
+
+    private fun buildMutationConflictMessage(mutation: PendingMutationEntity, statusCode: Int): String {
+        val subject = when (mutation.type) {
+            "create_order" -> "A queued order draft"
+            "add_comment" -> "A queued comment"
+            "transition_status" -> "A queued status change"
+            else -> "A queued change"
+        }
+        return "$subject was dropped after a permanent server response ($statusCode). Newer changes can continue syncing."
+    }
 }

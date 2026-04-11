@@ -64,6 +64,7 @@ import com.statusflow.mobile.data.MobileSessionStore
 import com.statusflow.mobile.data.MobileSessionSummary
 import com.statusflow.mobile.data.MobileSyncState
 import com.statusflow.mobile.data.MobileUserSummary
+import com.statusflow.mobile.data.MobileSessionExpiredException
 import com.statusflow.mobile.data.StatusFlowApiRepository
 import com.statusflow.mobile.ui.theme.Amber300
 import com.statusflow.mobile.ui.theme.Blue300
@@ -446,7 +447,7 @@ class MobileHomeViewModel(
     }
 
     private fun isUnauthorized(throwable: Throwable): Boolean {
-        return throwable.message?.contains("401") == true
+        return throwable is MobileSessionExpiredException
     }
 }
 

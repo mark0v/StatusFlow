@@ -87,10 +87,6 @@ internal object StatusFlowMobileMapper {
         )
     }
 
-    fun mapRemoteComment(comment: OrderCommentApiResponse): MobileOrderComment = mapComment(comment)
-
-    fun mapRemoteHistory(event: OrderHistoryApiResponse): MobileOrderHistoryEvent = mapHistory(event)
-
     fun mapCachedComment(comment: CachedCommentEntity): MobileOrderComment {
         return MobileOrderComment(
             id = comment.id,
