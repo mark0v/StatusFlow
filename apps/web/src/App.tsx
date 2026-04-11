@@ -410,6 +410,22 @@ export default function App() {
     () => users.find((user) => user.role === "operator") ?? null,
     [users]
   );
+  const isOperator = session?.user.role === "operator";
+  const currentCustomer = useMemo(() => {
+    if (!session) {
+      return customer;
+    }
+
+    if (session.user.role === "customer") {
+      return (
+        users.find((user) => user.email === session.user.email) ??
+        users.find((user) => user.id === session.user.id) ??
+        customer
+      );
+    }
+
+    return customer;
+  }, [customer, session, users]);
 
   const filteredOrders = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -555,7 +571,7 @@ export default function App() {
   async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!customer) {
+    if (!currentCustomer) {
       setActionError("Customer seed user is missing.");
       return;
     }
@@ -577,7 +593,7 @@ export default function App() {
         body: JSON.stringify({
           title: formState.title,
           description: formState.description,
-          customer_id: customer.id
+          customer_id: currentCustomer.id
         })
       });
 
@@ -601,6 +617,11 @@ export default function App() {
   }
 
   async function handleTransition(orderId: string, toStatus: OrderStatus) {
+    if (!isOperator) {
+      setActionError("Only operators can change order status.");
+      return;
+    }
+
     if (!operator) {
       setActionError("Operator seed user is missing.");
       return;
@@ -650,6 +671,11 @@ export default function App() {
 
     if (!session) {
       setActionError("Sign in again to add comments.");
+      return;
+    }
+
+    if (!isOperator) {
+      setActionError("Only operators can leave queue comments.");
       return;
     }
 
@@ -705,11 +731,11 @@ export default function App() {
             className="hero-logo auth-logo"
             src={statusFlowLogo}
           />
-          <p className="eyebrow">Operator sign in</p>
+          <p className="eyebrow">Live sign in</p>
           <h1>Access the live workflow console</h1>
           <p className="lead">
-            Sign in with an operator account to review orders, update statuses,
-            and manage the shared queue.
+            Sign in with a seeded operator or customer account to enter the
+            shared workflow used across web and mobile.
           </p>
 
           <form className="auth-form" onSubmit={handleLogin}>
@@ -751,28 +777,10 @@ export default function App() {
             <strong>Seed operator</strong>
             <span>operator@example.com / operator123</span>
           </div>
-        </section>
-      </main>
-    );
-  }
-
-  if (session.user.role !== "operator") {
-    return (
-      <main className="shell shell-auth">
-        <section className="auth-panel">
-          <img
-            alt="StatusFlow operator console"
-            className="hero-logo auth-logo"
-            src={statusFlowLogo}
-          />
-          <p className="eyebrow">Restricted</p>
-          <h1>Operator access required</h1>
-          <p className="lead">
-            The web console is currently reserved for operator accounts.
-          </p>
-          <button className="primary-action" onClick={handleLogout} type="button">
-            Sign out
-          </button>
+          <div className="auth-hint">
+            <strong>Seed customer</strong>
+            <span>customer@example.com / customer123</span>
+          </div>
         </section>
       </main>
     );
@@ -932,7 +940,7 @@ export default function App() {
 
                 <button
                   className="primary-action"
-                  disabled={isSubmitting || !customer}
+                  disabled={isSubmitting || !currentCustomer}
                   type="submit"
                 >
                   {isSubmitting ? "Submitting..." : "Create order"}
@@ -1065,6 +1073,8 @@ export default function App() {
                             <div className="table-actions">
                               {nextStatuses.length === 0 ? (
                                 <span className="transition-terminal">Terminal state</span>
+                              ) : !isOperator ? (
+                                <span className="transition-terminal">Operator only</span>
                               ) : (
                                 <div className="row-action-menu">
                                   <button
@@ -1184,29 +1194,35 @@ export default function App() {
                   <div className="inspector-section-heading">
                     <div>
                       <p className="eyebrow">Comments</p>
-                      <h4>Operator notes</h4>
+                      <h4>{isOperator ? "Operator notes" : "Queue notes"}</h4>
                     </div>
                     <span className="inspector-count">{selectedOrderDetail.comments.length}</span>
                   </div>
 
-                  <form className="comment-form" onSubmit={handleAddComment}>
-                    <label className="field field-wide">
-                      <span>Add comment</span>
-                      <textarea
-                        value={commentDraft}
-                        onChange={(event) => setCommentDraft(event.target.value)}
-                        placeholder="Leave a note for the next operator."
-                        rows={3}
-                      />
-                    </label>
-                    <button
-                      className="primary-action"
-                      disabled={isSubmitting || commentDraft.trim().length === 0}
-                      type="submit"
-                    >
-                      {isSubmitting ? "Posting..." : "Post comment"}
-                    </button>
-                  </form>
+                  {isOperator ? (
+                    <form className="comment-form" onSubmit={handleAddComment}>
+                      <label className="field field-wide">
+                        <span>Add comment</span>
+                        <textarea
+                          value={commentDraft}
+                          onChange={(event) => setCommentDraft(event.target.value)}
+                          placeholder="Leave a note for the next operator."
+                          rows={3}
+                        />
+                      </label>
+                      <button
+                        className="primary-action"
+                        disabled={isSubmitting || commentDraft.trim().length === 0}
+                        type="submit"
+                      >
+                        {isSubmitting ? "Posting..." : "Post comment"}
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="mini-empty">
+                      Comments are available in operator mode.
+                    </div>
+                  )}
 
                   {selectedOrderDetail.comments.length === 0 ? (
                     <div className="mini-empty">No comments yet for this order.</div>

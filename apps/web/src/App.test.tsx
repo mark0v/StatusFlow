@@ -155,19 +155,41 @@ function installFetchMock(initialOrders = baseOrders()) {
       }
     ])
   );
-  const session: AuthSession = {
-    access_token: "test-token",
-    token_type: "bearer",
-    expires_in_seconds: 43200,
-    user: users[1]
-  };
+  const sessionsByEmail = new Map<string, AuthSession>([
+    [
+      "operator@example.com",
+      {
+        access_token: "operator-token",
+        token_type: "bearer",
+        expires_in_seconds: 43200,
+        user: {
+          ...users[1],
+          email: "operator@example.com"
+        }
+      }
+    ],
+    [
+      "customer@example.com",
+      {
+        access_token: "customer-token",
+        token_type: "bearer",
+        expires_in_seconds: 43200,
+        user: {
+          ...users[0],
+          email: "customer@example.com"
+        }
+      }
+    ]
+  ]);
 
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const requestUrl = typeof input === "string" ? input : input.toString();
     const path = requestUrl.replace("http://localhost:8000", "");
     const method = init?.method ?? "GET";
     const headers = new Headers(init?.headers);
-    const isAuthed = headers.get("Authorization") === `Bearer ${session.access_token}`;
+    const isAuthed = Array.from(sessionsByEmail.values()).some(
+      (session) => headers.get("Authorization") === `Bearer ${session.access_token}`
+    );
 
     if (path === "/auth/login" && method === "POST") {
       const body = JSON.parse(String(init?.body ?? "{}")) as {
@@ -175,8 +197,11 @@ function installFetchMock(initialOrders = baseOrders()) {
         password: string;
       };
 
-      if (body.email === "operator@example.com" && body.password === "operator123") {
-        return jsonResponse(session);
+      if (
+        (body.email === "operator@example.com" && body.password === "operator123") ||
+        (body.email === "customer@example.com" && body.password === "customer123")
+      ) {
+        return jsonResponse(sessionsByEmail.get(body.email));
       }
 
       return jsonResponse({ detail: "Invalid email or password." }, { status: 401 });
@@ -361,13 +386,19 @@ describe("App", () => {
     window.localStorage.clear();
   });
 
-  async function signIn(user = userEvent.setup()) {
+  async function signIn(
+    user = userEvent.setup(),
+    credentials = {
+      email: "operator@example.com",
+      password: "operator123"
+    }
+  ) {
     render(<App />);
 
     await user.clear(screen.getByLabelText("Email"));
-    await user.type(screen.getByLabelText("Email"), "operator@example.com");
+    await user.type(screen.getByLabelText("Email"), credentials.email);
     await user.clear(screen.getByLabelText("Password"));
-    await user.type(screen.getByLabelText("Password"), "operator123");
+    await user.type(screen.getByLabelText("Password"), credentials.password);
     await user.click(screen.getByRole("button", { name: "Sign in" }));
     await screen.findByRole("heading", { name: "Operate the live workflow" });
 
@@ -424,6 +455,39 @@ describe("App", () => {
 
     expect(screen.getByText("Live queue")).toBeInTheDocument();
     expect(screen.getByText("Showing 3 of 3 orders")).toBeInTheDocument();
+  });
+
+  it("lets a customer sign in, create orders, and browse the queue in read-only mode", async () => {
+    const user = await signIn(userEvent.setup(), {
+      email: "customer@example.com",
+      password: "customer123"
+    });
+
+    expect(screen.getByText("Alex Morgan | customer")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Operator access required" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await user.type(screen.getByLabelText("Order title"), "Customer raised replacement request");
+    await user.type(screen.getByLabelText("Description"), "Customer captured the issue from the portal.");
+    await user.click(screen.getByRole("button", { name: /^Create order$/ }));
+
+    await screen.findByRole("cell", { name: "Customer raised replacement request" });
+
+    const rowTitle = await screen.findByRole("cell", { name: "Replace display unit" });
+    const row = rowTitle.closest("tr");
+
+    if (!row) {
+      throw new Error("Unable to find table row for Replace display unit");
+    }
+
+    expect(within(row).getByText("Operator only")).toBeInTheDocument();
+
+    await user.click(row);
+
+    await screen.findByText("Recent status movement");
+    expect(screen.getByText("Comments are available in operator mode.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Post comment" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Change status" })).not.toBeInTheDocument();
   });
 
   it("creates a new order from the reveal form", async () => {
