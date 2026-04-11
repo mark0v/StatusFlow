@@ -127,11 +127,15 @@ function installFetchMock(
   initialOrders = baseOrders(),
   options?: {
     failingDetailIds?: string[];
+    transientFailingDetailIds?: string[];
   }
 ) {
   let orders = [...initialOrders];
   let orderCounter = 1000 + orders.length;
   const failingDetailIds = new Set(options?.failingDetailIds ?? []);
+  const transientFailingDetailIds = new Map(
+    (options?.transientFailingDetailIds ?? []).map((orderId) => [orderId, 1])
+  );
   const details = new Map<string, OrderDetail>(
     orders.map((order, index) => [
       order.id,
@@ -224,6 +228,12 @@ function installFetchMock(
     const orderMatch = path.match(/^\/orders\/([^/]+)$/);
     if (orderMatch && method === "GET") {
       if (failingDetailIds.has(orderMatch[1])) {
+        return jsonResponse({ detail: "Selected order detail is temporarily unavailable." }, { status: 500 });
+      }
+
+      const remainingTransientFailures = transientFailingDetailIds.get(orderMatch[1]);
+      if ((remainingTransientFailures ?? 0) > 0) {
+        transientFailingDetailIds.set(orderMatch[1], remainingTransientFailures! - 1);
         return jsonResponse({ detail: "Selected order detail is temporarily unavailable." }, { status: 500 });
       }
 
@@ -366,6 +376,18 @@ function countRequests(fetchMock: ReturnType<typeof installFetchMock>, path: str
   }).length;
 }
 
+function countRequestsMatching(
+  fetchMock: ReturnType<typeof installFetchMock>,
+  pattern: RegExp,
+  method = "GET"
+) {
+  return fetchMock.mock.calls.filter(([input, init]) => {
+    const requestUrl = typeof input === "string" ? input : input.toString();
+    const requestPath = requestUrl.replace("http://localhost:8000", "");
+    return pattern.test(requestPath) && (init?.method ?? "GET") === method;
+  }).length;
+}
+
 function getStatusCard(label: string) {
   const summaryStrip = document.querySelector(".summary-strip");
 
@@ -439,14 +461,29 @@ describe("App", () => {
     });
   });
 
-  it("filters the visible queue with the search field", async () => {
+  it("filters the visible queue by code, title, and customer name", async () => {
     const user = await signIn();
 
+    await user.type(screen.getByLabelText("Search queue"), "SF-1002");
+
+    expect(screen.getByRole("cell", { name: "Verify warranty documents" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "Replace display unit" })).not.toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 3 orders")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Search queue"));
     await user.type(screen.getByLabelText("Search queue"), "shipment");
 
     expect(screen.getByRole("cell", { name: "Prepare approved shipment" })).toBeInTheDocument();
     expect(screen.queryByRole("cell", { name: "Replace display unit" })).not.toBeInTheDocument();
     expect(screen.getByText("Showing 1 of 3 orders")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Search queue"));
+    await user.type(screen.getByLabelText("Search queue"), "alex morgan");
+
+    expect(screen.getByRole("cell", { name: "Replace display unit" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Verify warranty documents" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Prepare approved shipment" })).toBeInTheDocument();
+    expect(screen.getByText("Showing 3 of 3 orders")).toBeInTheDocument();
   });
 
   it("refreshes the queue on demand and surfaces snapshot metadata", async () => {
@@ -465,6 +502,33 @@ describe("App", () => {
 
     expect(screen.getByText("Live queue")).toBeInTheDocument();
     expect(screen.getByText("Showing 3 of 3 orders")).toBeInTheDocument();
+  });
+
+  it("keeps the selected order in focus across a manual refresh", async () => {
+    const user = await signIn();
+
+    const selectedRowTitle = await screen.findByRole("cell", { name: "Verify warranty documents" });
+    const selectedRow = selectedRowTitle.closest("tr");
+
+    if (!selectedRow) {
+      throw new Error("Unable to find table row for Verify warranty documents");
+    }
+
+    await user.click(selectedRow);
+    await screen.findByRole("heading", { name: "Verify warranty documents" });
+
+    const ordersRequestsBeforeRefresh = countRequests(fetchMock, "/orders");
+    const detailRequestsBeforeRefresh = countRequestsMatching(fetchMock, /^\/orders\/order-2$/);
+
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => {
+      expect(countRequests(fetchMock, "/orders")).toBeGreaterThan(ordersRequestsBeforeRefresh);
+      expect(countRequestsMatching(fetchMock, /^\/orders\/order-2$/)).toBeGreaterThan(detailRequestsBeforeRefresh);
+    });
+
+    expect(screen.getByRole("heading", { name: "Verify warranty documents" })).toBeInTheDocument();
+    expect(screen.queryByText("Selected order is unavailable.")).not.toBeInTheDocument();
   });
 
   it("lets a customer sign in, create orders, and browse the queue in read-only mode", async () => {
@@ -525,6 +589,25 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Open SF-1002" }));
     await screen.findByRole("heading", { name: "Verify warranty documents" });
     expect(screen.queryByText("Selected order is unavailable.")).not.toBeInTheDocument();
+  });
+
+  it("recovers a transient detail failure through the refresh action", async () => {
+    fetchMock = installFetchMock(baseOrders(), { transientFailingDetailIds: ["order-1"] });
+
+    const user = await signIn();
+
+    await screen.findByText("Selected order is unavailable.");
+    const recoveryCard = screen.getByText("Selected order is unavailable.").closest("article");
+
+    if (!recoveryCard) {
+      throw new Error("Unable to find detail recovery card");
+    }
+
+    await user.click(within(recoveryCard).getByRole("button", { name: "Refresh" }));
+
+    await screen.findByRole("heading", { name: "Replace display unit" });
+    expect(screen.queryByText("Selected order is unavailable.")).not.toBeInTheDocument();
+    expect(screen.getByText("Initial operator note.")).toBeInTheDocument();
   });
 
   it("creates a new order from the reveal form", async () => {
