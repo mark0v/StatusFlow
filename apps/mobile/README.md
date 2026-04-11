@@ -53,6 +53,27 @@ Artifacts are written to:
 - `outputs/mobile-ui/mobile-smoke.png`
 - `outputs/mobile-ui/mobile-smoke.xml`
 
+## Cross-client sync smoke
+
+From the repo root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/cross-client-sync.ps1 -StartEmulator
+```
+
+This scenario:
+
+- seeds the Android app with the operator session used for sync verification
+- creates a fresh order through the live backend
+- transitions it to `in_review`
+- adds a live operator comment
+- refreshes the mobile queue and verifies the new order, status, and comment are visible in the app
+
+Artifacts are written to:
+
+- `outputs/mobile-ui/cross-client-mobile.png`
+- `outputs/mobile-ui/cross-client-mobile.xml`
+
 ## Compose UI instrumentation
 
 From `apps/mobile`:
