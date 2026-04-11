@@ -127,12 +127,14 @@ function installFetchMock(
   initialOrders = baseOrders(),
   options?: {
     failingDetailIds?: string[];
+    failingOrdersGetCount?: number;
     transientFailingDetailIds?: string[];
   }
 ) {
   let orders = [...initialOrders];
   let orderCounter = 1000 + orders.length;
   const failingDetailIds = new Set(options?.failingDetailIds ?? []);
+  let failingOrdersGetCount = options?.failingOrdersGetCount ?? 0;
   const transientFailingDetailIds = new Map(
     (options?.transientFailingDetailIds ?? []).map((orderId) => [orderId, 1])
   );
@@ -222,6 +224,11 @@ function installFetchMock(
     }
 
     if (path === "/orders" && method === "GET") {
+      if (failingOrdersGetCount > 0) {
+        failingOrdersGetCount -= 1;
+        return jsonResponse({ detail: "Dashboard snapshot is temporarily unavailable." }, { status: 500 });
+      }
+
       return jsonResponse(orders);
     }
 
@@ -437,6 +444,17 @@ describe("App", () => {
     return user;
   }
 
+  async function selectOrder(user: ReturnType<typeof userEvent.setup>, title: string) {
+    const rowTitle = await screen.findByRole("cell", { name: title });
+    const row = rowTitle.closest("tr");
+
+    if (!row) {
+      throw new Error(`Unable to find table row for ${title}`);
+    }
+
+    await user.click(row);
+  }
+
   it("renders all status counters, including zero-value statuses", async () => {
     await signIn();
 
@@ -507,14 +525,7 @@ describe("App", () => {
   it("keeps the selected order in focus across a manual refresh", async () => {
     const user = await signIn();
 
-    const selectedRowTitle = await screen.findByRole("cell", { name: "Verify warranty documents" });
-    const selectedRow = selectedRowTitle.closest("tr");
-
-    if (!selectedRow) {
-      throw new Error("Unable to find table row for Verify warranty documents");
-    }
-
-    await user.click(selectedRow);
+    await selectOrder(user, "Verify warranty documents");
     await screen.findByRole("heading", { name: "Verify warranty documents" });
 
     const ordersRequestsBeforeRefresh = countRequests(fetchMock, "/orders");
@@ -529,6 +540,47 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "Verify warranty documents" })).toBeInTheDocument();
     expect(screen.queryByText("Selected order is unavailable.")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the cached snapshot when refresh loses the dashboard API", async () => {
+    const user = await signIn();
+
+    await selectOrder(user, "Verify warranty documents");
+    await screen.findByRole("heading", { name: "Verify warranty documents" });
+
+    fetchMock = installFetchMock(baseOrders(), { failingOrdersGetCount: 1 });
+
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await screen.findByText("Showing the last successful queue state.");
+    expect(screen.getByText("Cached view")).toBeInTheDocument();
+    expect(screen.getAllByText(/Live sync failed\. Showing the last successful snapshot\./)).toHaveLength(2);
+    expect(screen.getByRole("heading", { name: "Verify warranty documents" })).toBeInTheDocument();
+    expect(screen.getByText("Order detail for Verify warranty documents.")).toBeInTheDocument();
+  });
+
+  it("restores the cached snapshot on reload when the dashboard API is unavailable", async () => {
+    const user = userEvent.setup();
+    const firstRender = render(<App />);
+
+    await user.clear(screen.getByLabelText("Email"));
+    await user.type(screen.getByLabelText("Email"), "operator@example.com");
+    await user.clear(screen.getByLabelText("Password"));
+    await user.type(screen.getByLabelText("Password"), "operator123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("heading", { name: "Operate the live workflow" });
+    await selectOrder(user, "Verify warranty documents");
+    await screen.findByRole("heading", { name: "Verify warranty documents" });
+
+    firstRender.unmount();
+
+    fetchMock = installFetchMock(baseOrders(), { failingOrdersGetCount: 1 });
+    render(<App />);
+
+    await screen.findByText("Showing the last successful queue state.");
+    expect(screen.getByText("Cached view")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Verify warranty documents" })).toBeInTheDocument();
+    expect(screen.getByText("Order detail for Verify warranty documents.")).toBeInTheDocument();
   });
 
   it("lets a customer sign in, create orders, and browse the queue in read-only mode", async () => {

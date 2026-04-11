@@ -10,6 +10,10 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localho
 export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED";
 export const FORBIDDEN_ERROR = "FORBIDDEN";
 
+export function isAuthFailureMessage(message: string) {
+  return message === AUTH_REQUIRED_ERROR || message === FORBIDDEN_ERROR;
+}
+
 async function readJson<T>(path: string, token?: string, init?: RequestInit) {
   const headers = new Headers(init?.headers ?? {});
 

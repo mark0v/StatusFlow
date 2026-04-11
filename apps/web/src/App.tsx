@@ -2,18 +2,27 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import statusFlowLogo from "./assets/statusflow-logo.svg";
 import {
   API_BASE_URL,
-  AUTH_REQUIRED_ERROR,
+  FORBIDDEN_ERROR,
   addOrderComment,
   createOrder,
+  isAuthFailureMessage,
   login,
   transitionOrderStatus
 } from "./data/webApi";
+import {
+  clearCachedConsoleSnapshot,
+  persistCachedConsoleSnapshot,
+  persistCachedOrderDetail,
+  readCachedConsoleSnapshot
+} from "./data/webCacheStore";
 import { persistSession, readStoredSession } from "./data/webSessionStore";
 import {
   filterOrders,
   getGroupedStatuses,
   resolveCurrentCustomer,
   resolveRecoveryCandidateOrder,
+  restoreCachedDashboardSyncResult,
+  restoreCachedDetailSyncResult,
   sortOrders,
   syncDashboardAndDetail,
   syncOrderDetail
@@ -34,6 +43,8 @@ import {
   type SortField,
   type UserSummary
 } from "./data/webTypes";
+
+type SyncSource = "live" | "cached";
 
 export default function App() {
   const skipNextDetailBootstrapOrderId = useRef<string | null>(null);
@@ -69,6 +80,8 @@ export default function App() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  const [syncSource, setSyncSource] = useState<SyncSource>("live");
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
   function applyDashboardState(data: {
     orders: OrderCard[];
@@ -89,6 +102,38 @@ export default function App() {
     }
   }
 
+  function applyLiveSyncState(notice: string | null = null) {
+    setSyncSource("live");
+    setSyncNotice(notice);
+    setError(null);
+  }
+
+  function applyCachedSyncState(notice: string) {
+    setSyncSource("cached");
+    setSyncNotice(notice);
+    setError(null);
+  }
+
+  function restoreCachedDashboard(
+    preferredSelectedOrderId: string | null | undefined,
+    notice: string
+  ) {
+    const cachedSnapshot = readCachedConsoleSnapshot();
+
+    if (!cachedSnapshot) {
+      return false;
+    }
+
+    const nextState = restoreCachedDashboardSyncResult(cachedSnapshot, preferredSelectedOrderId);
+    applyDashboardState(nextState.dashboard);
+    setLastRefreshedAt(nextState.lastRefreshedAt);
+    skipNextDetailBootstrapOrderId.current = nextState.selectedOrderId;
+    setSelectedOrderId(nextState.selectedOrderId);
+    applyDetailState(nextState.selectedOrderDetail, nextState.detailError);
+    applyCachedSyncState(notice);
+    return true;
+  }
+
   async function refreshDashboardAndDetail(
     accessToken: string,
     preferredSelectedOrderId?: string | null,
@@ -102,12 +147,20 @@ export default function App() {
       skipNextDetailBootstrapOrderId.current = nextState.selectedOrderId;
       setSelectedOrderId(nextState.selectedOrderId);
       applyDetailState(nextState.selectedOrderDetail, nextState.detailError);
+      persistCachedConsoleSnapshot({
+        dashboard: nextState.dashboard,
+        lastRefreshedAt: nextState.lastRefreshedAt,
+        selectedOrderId: nextState.selectedOrderId,
+        selectedOrderDetail: nextState.selectedOrderDetail
+      });
+      applyLiveSyncState();
     } finally {
       setIsDetailLoading(false);
     }
   }
 
   function handleAuthExpired(message = "Your session expired. Sign in again.") {
+    clearCachedConsoleSnapshot();
     persistSession(null);
     setSession(null);
     setOrders([]);
@@ -121,6 +174,8 @@ export default function App() {
     setIsCreateOpen(false);
     setIsRefreshing(false);
     setLastRefreshedAt(null);
+    setSyncSource("live");
+    setSyncNotice(null);
     setAuthError(message);
   }
 
@@ -147,8 +202,16 @@ export default function App() {
           return;
         }
 
-        if (fetchError instanceof Error && fetchError.message === AUTH_REQUIRED_ERROR) {
-          handleAuthExpired();
+        if (fetchError instanceof Error && isAuthFailureMessage(fetchError.message)) {
+          handleAuthExpired(
+            fetchError.message === FORBIDDEN_ERROR
+              ? "Your access is no longer valid. Sign in again."
+              : undefined
+          );
+          return;
+        }
+
+        if (restoreCachedDashboard(selectedOrderId, "Live sync failed. Showing the last successful snapshot.")) {
           return;
         }
 
@@ -192,14 +255,38 @@ export default function App() {
         setIsDetailLoading(true);
         setDetailError(null);
         const nextDetailState = await syncOrderDetail(accessToken, activeOrderId, controller.signal);
+        if (nextDetailState.selectedOrderDetail) {
+          applyDetailState(nextDetailState.selectedOrderDetail, nextDetailState.detailError);
+          persistCachedOrderDetail(nextDetailState.selectedOrderDetail, activeOrderId);
+          if (syncSource !== "cached") {
+            applyLiveSyncState();
+          }
+          return;
+        }
+
+        const cachedSnapshot = readCachedConsoleSnapshot();
+        const cachedDetailState = cachedSnapshot
+          ? restoreCachedDetailSyncResult(cachedSnapshot, activeOrderId)
+          : null;
+
+        if (cachedDetailState) {
+          applyDetailState(cachedDetailState.selectedOrderDetail, cachedDetailState.detailError);
+          applyCachedSyncState("Live detail failed. Showing the last successful order detail.");
+          return;
+        }
+
         applyDetailState(nextDetailState.selectedOrderDetail, nextDetailState.detailError);
       } catch (fetchError) {
         if (controller.signal.aborted) {
           return;
         }
 
-        if (fetchError instanceof Error && fetchError.message === AUTH_REQUIRED_ERROR) {
-          handleAuthExpired();
+        if (fetchError instanceof Error && isAuthFailureMessage(fetchError.message)) {
+          handleAuthExpired(
+            fetchError.message === FORBIDDEN_ERROR
+              ? "Your access is no longer valid. Sign in again."
+              : undefined
+          );
           return;
         }
       } finally {
@@ -293,16 +380,22 @@ export default function App() {
       setError(null);
       await refreshDashboardAndDetail(session.access_token, selectedOrderId);
     } catch (refreshError) {
-      if (refreshError instanceof Error && refreshError.message === AUTH_REQUIRED_ERROR) {
-        handleAuthExpired();
+      if (refreshError instanceof Error && isAuthFailureMessage(refreshError.message)) {
+        handleAuthExpired(
+          refreshError.message === FORBIDDEN_ERROR
+            ? "Your access is no longer valid. Sign in again."
+            : undefined
+        );
         return;
       }
 
-      setError(
-        refreshError instanceof Error
-          ? refreshError.message
-          : "Unknown error while refreshing dashboard data."
-      );
+      if (!restoreCachedDashboard(selectedOrderId, "Live sync failed. Showing the last successful snapshot.")) {
+        setError(
+          refreshError instanceof Error
+            ? refreshError.message
+            : "Unknown error while refreshing dashboard data."
+        );
+      }
     } finally {
       setIsRefreshing(false);
     }
@@ -340,7 +433,7 @@ export default function App() {
       setSession(nextSession);
     } catch (loginError) {
       setAuthError(
-        loginError instanceof Error && loginError.message === AUTH_REQUIRED_ERROR
+        loginError instanceof Error && isAuthFailureMessage(loginError.message)
           ? "Invalid email or password."
           : loginError instanceof Error
             ? loginError.message
@@ -352,6 +445,7 @@ export default function App() {
   }
 
   function handleLogout() {
+    clearCachedConsoleSnapshot();
     persistSession(null);
     setSession(null);
     setOrders([]);
@@ -368,6 +462,8 @@ export default function App() {
     setSearchQuery("");
     setIsRefreshing(false);
     setLastRefreshedAt(null);
+    setSyncSource("live");
+    setSyncNotice(null);
   }
 
   async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
@@ -397,8 +493,12 @@ export default function App() {
       setIsCreateOpen(false);
       await refreshDashboardAndDetail(session.access_token);
     } catch (submitError) {
-      if (submitError instanceof Error && submitError.message === AUTH_REQUIRED_ERROR) {
-        handleAuthExpired();
+      if (submitError instanceof Error && isAuthFailureMessage(submitError.message)) {
+        handleAuthExpired(
+          submitError.message === FORBIDDEN_ERROR
+            ? "Your access is no longer valid. Sign in again."
+            : undefined
+        );
         return;
       }
 
@@ -441,8 +541,12 @@ export default function App() {
       setOpenActionsOrderId(null);
       await refreshDashboardAndDetail(session.access_token, orderId);
     } catch (submitError) {
-      if (submitError instanceof Error && submitError.message === AUTH_REQUIRED_ERROR) {
-        handleAuthExpired();
+      if (submitError instanceof Error && isAuthFailureMessage(submitError.message)) {
+        handleAuthExpired(
+          submitError.message === FORBIDDEN_ERROR
+            ? "Your access is no longer valid. Sign in again."
+            : undefined
+        );
         return;
       }
 
@@ -491,8 +595,12 @@ export default function App() {
       setCommentDraft("");
       await refreshDashboardAndDetail(session.access_token, selectedOrderId);
     } catch (submitError) {
-      if (submitError instanceof Error && submitError.message === AUTH_REQUIRED_ERROR) {
-        handleAuthExpired();
+      if (submitError instanceof Error && isAuthFailureMessage(submitError.message)) {
+        handleAuthExpired(
+          submitError.message === FORBIDDEN_ERROR
+            ? "Your access is no longer valid. Sign in again."
+            : undefined
+        );
         return;
       }
 
@@ -637,13 +745,17 @@ export default function App() {
                   ? "Syncing first snapshot"
                   : isRefreshing
                     ? "Refreshing live queue"
-                    : error
+                    : syncSource === "cached"
+                      ? "Cached view"
+                      : error
                       ? "Refresh needs attention"
                       : "Live queue"}
               </strong>
               <p>
-                {error
-                  ? error
+                {syncSource === "cached" && syncNotice
+                  ? `${syncNotice} Last sync ${lastRefreshedAt ? formatTimestamp(lastRefreshedAt) : "unknown"}`
+                  : error
+                    ? error
                   : lastRefreshedAt
                     ? `Last sync ${formatTimestamp(lastRefreshedAt)}`
                     : "Waiting for the first successful sync."}
@@ -749,7 +861,15 @@ export default function App() {
             </div>
           ) : null}
 
-          {error ? (
+          {syncSource === "cached" && syncNotice ? (
+            <div className="feedback-card feedback-sync feedback-cached">
+              <span className="feedback-eyebrow">Cached snapshot</span>
+              <strong>Showing the last successful queue state.</strong>
+              <p>{syncNotice}</p>
+            </div>
+          ) : null}
+
+          {error && syncSource !== "cached" ? (
             <div className="feedback-card feedback-error">
               <span className="feedback-eyebrow">Error</span>
               <strong>Dashboard failed to load.</strong>

@@ -1,4 +1,4 @@
-import { loadDashboardData, loadOrderDetail } from "./webApi";
+import { isAuthFailureMessage, loadDashboardData, loadOrderDetail } from "./webApi";
 import {
   orderedStatuses,
   statusLabels,
@@ -11,6 +11,7 @@ import {
   type SortField,
   type UserSummary
 } from "./webTypes";
+import type { CachedConsoleSnapshot } from "./webCacheStore";
 
 export type DashboardSyncResult = {
   dashboard: DashboardData;
@@ -24,6 +25,8 @@ export type DetailSyncResult = {
   selectedOrderDetail: OrderDetail | null;
   detailError: string | null;
 };
+
+export type SyncSource = "live" | "cached";
 
 export function resolveCurrentCustomer(users: UserSummary[], session: AuthSession | null) {
   const customer = users.find((user) => user.role === "customer") ?? null;
@@ -107,6 +110,42 @@ export function sortOrders(
   return next;
 }
 
+export function restoreCachedDashboardSyncResult(
+  cachedSnapshot: CachedConsoleSnapshot,
+  preferredSelectedOrderId?: string | null
+): DashboardSyncResult {
+  const selectedOrderId = resolveSelectedOrderId(
+    cachedSnapshot.dashboard.orders,
+    preferredSelectedOrderId ?? cachedSnapshot.selectedOrderId
+  );
+
+  return {
+    dashboard: cachedSnapshot.dashboard,
+    lastRefreshedAt: cachedSnapshot.lastRefreshedAt,
+    selectedOrderId,
+    selectedOrderDetail: selectedOrderId
+      ? cachedSnapshot.detailsByOrderId[selectedOrderId] ?? null
+      : null,
+    detailError: null
+  };
+}
+
+export function restoreCachedDetailSyncResult(
+  cachedSnapshot: CachedConsoleSnapshot,
+  selectedOrderId: string
+): DetailSyncResult | null {
+  const cachedDetail = cachedSnapshot.detailsByOrderId[selectedOrderId];
+
+  if (!cachedDetail) {
+    return null;
+  }
+
+  return {
+    selectedOrderDetail: cachedDetail,
+    detailError: null
+  };
+}
+
 function resolveSelectedOrderId(
   orders: OrderCard[],
   preferredSelectedOrderId?: string | null
@@ -146,7 +185,7 @@ export async function syncDashboardAndDetail(
       detailError: null
     };
   } catch (detailFetchError) {
-    if (detailFetchError instanceof Error && detailFetchError.message === "AUTH_REQUIRED") {
+    if (detailFetchError instanceof Error && isAuthFailureMessage(detailFetchError.message)) {
       throw detailFetchError;
     }
 
@@ -175,7 +214,7 @@ export async function syncOrderDetail(
       detailError: null
     };
   } catch (fetchError) {
-    if (fetchError instanceof Error && fetchError.message === "AUTH_REQUIRED") {
+    if (fetchError instanceof Error && isAuthFailureMessage(fetchError.message)) {
       throw fetchError;
     }
 
