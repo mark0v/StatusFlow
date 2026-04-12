@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import statusFlowLogo from "./assets/statusflow-logo.svg";
 import {
   API_BASE_URL,
   FORBIDDEN_ERROR,
@@ -43,11 +42,7 @@ import {
   type QueuedStatusTransitionMutation
 } from "./data/webMutationQueueStore";
 import {
-  formatTimestamp,
-  historySummary,
-  orderedStatuses,
   statusLabels,
-  statusTone,
   type AuthSession,
   type CreateOrderFormState,
   type OrderCard,
@@ -58,6 +53,12 @@ import {
   type SortField,
   type UserSummary
 } from "./data/webTypes";
+import { AuthScreen } from "./components/AuthScreen";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { Hero } from "./components/Hero";
+import { OrderInspector } from "./components/OrderInspector";
+import { OrderTable } from "./components/OrderTable";
+import { StatusSummary } from "./components/StatusSummary";
 
 type SyncSource = "live" | "cached";
 
@@ -104,7 +105,6 @@ export default function App() {
   const [pageSize, setPageSize] = useState(25);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
-  // Derive initials from user name for avatar
   const userInitials = useMemo(() => {
     if (!session?.user?.name) return "?";
     const trimmed = session.user.name.trim();
@@ -127,7 +127,6 @@ export default function App() {
   function applyDetailState(nextDetail: OrderDetail | null, nextDetailError: string | null) {
     setSelectedOrderDetail(nextDetail);
     setDetailError(nextDetailError);
-
     if (nextDetail) {
       setCommentDraft("");
     }
@@ -150,7 +149,6 @@ export default function App() {
     notice: string
   ) {
     const cachedSnapshot = readCachedConsoleSnapshot();
-
     if (!cachedSnapshot) {
       return false;
     }
@@ -169,7 +167,6 @@ export default function App() {
     if (session) {
       replaceQueuedMutations(session.user.id, nextMutations);
     }
-
     setPendingMutations(nextMutations);
   }
 
@@ -186,7 +183,6 @@ export default function App() {
     if (errorMessage === NETWORK_UNAVAILABLE_ERROR) {
       return "Connection is unavailable. Queued changes will retry on the next refresh.";
     }
-
     return errorMessage;
   }
 
@@ -322,7 +318,6 @@ export default function App() {
       setQueueError(null);
       return;
     }
-
     setPendingMutations(readQueuedMutations(session.user.id));
   }, [session]);
 
@@ -451,7 +446,6 @@ export default function App() {
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
       const target = event.target;
-
       if (!(target instanceof Element)) {
         return;
       }
@@ -470,7 +464,6 @@ export default function App() {
     }
 
     document.addEventListener("mousedown", handlePointerDown);
-
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
@@ -519,14 +512,6 @@ export default function App() {
         : [...current, status]
     );
     setPage(1);
-  }
-
-  function sortIndicator(field: SortField) {
-    if (sortField !== field) {
-      return "^";
-    }
-
-    return sortDirection === "asc" ? "^" : "v";
   }
 
   async function handleRefresh() {
@@ -596,10 +581,7 @@ export default function App() {
     const nextUpdatedAt = mutation.createdAt;
     const nextOrders = orders.map((order) =>
       order.id === mutation.payload.orderId
-        ? {
-            ...order,
-            updated_at: nextUpdatedAt
-          }
+        ? { ...order, updated_at: nextUpdatedAt }
         : order
     );
 
@@ -623,11 +605,7 @@ export default function App() {
     const nextUpdatedAt = mutation.createdAt;
     const nextOrders = orders.map((order) =>
       order.id === mutation.payload.orderId
-        ? {
-            ...order,
-            status: mutation.payload.toStatus,
-            updated_at: nextUpdatedAt
-          }
+        ? { ...order, status: mutation.payload.toStatus, updated_at: nextUpdatedAt }
         : order
     );
 
@@ -721,6 +699,7 @@ export default function App() {
     setPendingMutations([]);
     setQueueNotice(null);
     setQueueError(null);
+    setIsUserMenuOpen(false);
   }
 
   async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
@@ -941,681 +920,106 @@ export default function App() {
 
   if (!session) {
     return (
-      <main className="shell shell-auth">
-        <section className="auth-panel">
-          <img
-            alt="StatusFlow operator console"
-            className="hero-logo auth-logo"
-            src={statusFlowLogo}
-          />
-          <p className="eyebrow">Live sign in</p>
-          <h1>Access the live workflow console</h1>
-          <p className="lead">
-            Sign in with a seeded operator or customer account to enter the
-            shared workflow used across web and mobile.
-          </p>
-
-          <form className="auth-form" onSubmit={handleLogin}>
-            <label className="field">
-              <span>Email</span>
-              <input
-                autoComplete="username"
-                value={authForm.email}
-                onChange={(event) =>
-                  setAuthForm((current) => ({ ...current, email: event.target.value }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Password</span>
-              <input
-                autoComplete="current-password"
-                type="password"
-                value={authForm.password}
-                onChange={(event) =>
-                  setAuthForm((current) => ({ ...current, password: event.target.value }))
-                }
-              />
-            </label>
-            <button className="primary-action" disabled={isAuthenticating} type="submit">
-              {isAuthenticating ? "Signing in..." : "Sign in"}
-            </button>
-          </form>
-
-          {authError ? (
-            <div className="feedback-card feedback-error compact">
-              <span className="feedback-eyebrow">Auth</span>
-              <strong>Unable to sign in.</strong>
-              <p>{authError}</p>
-            </div>
-          ) : null}
-
-          <div className="auth-hint">
-            <strong>Seed operator</strong>
-            <span>operator@example.com / operator123</span>
-          </div>
-          <div className="auth-hint">
-            <strong>Seed customer</strong>
-            <span>customer@example.com / customer123</span>
-          </div>
-        </section>
-      </main>
+      <ErrorBoundary>
+        <AuthScreen
+          email={authForm.email}
+          password={authForm.password}
+          isAuthenticating={isAuthenticating}
+          authError={authError}
+          onEmailChange={(email) => setAuthForm((current) => ({ ...current, email }))}
+          onPasswordChange={(password) => setAuthForm((current) => ({ ...current, password }))}
+          onSubmit={handleLogin}
+        />
+      </ErrorBoundary>
     );
   }
 
   return (
-    <main className="shell">
-      <section className="hero">
-        <div className="hero-top">
-          <div className="hero-brand">
-            <img
-              alt="StatusFlow operator console"
-              className="hero-logo"
-              src={statusFlowLogo}
-            />
-          </div>
-          <div className="hero-actions">
-            <span className="hero-order-count">
-              {isLoading ? "…" : `${orders.length} orders`}
-            </span>
-            <div className="user-menu-wrap">
-              <button
-                className="user-avatar-btn"
-                onClick={() => setIsUserMenuOpen((current) => !current)}
-                aria-label="User menu"
-                aria-expanded={isUserMenuOpen}
-                type="button"
-              >
-                <span className="user-avatar-initials">{userInitials}</span>
-              </button>
-              {isUserMenuOpen ? (
-                <div className="user-dropdown">
-                  <div className="user-dropdown-info">
-                    <span className="user-dropdown-name">{session.user.name}</span>
-                    <span className="user-dropdown-role">{session.user.role}</span>
-                  </div>
-                  <hr className="user-dropdown-sep" />
-                  <a
-                    className="user-dropdown-item"
-                    href={`${API_BASE_URL}/docs`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    API docs
-                  </a>
-                  <div className="user-dropdown-item user-dropdown-endpoint">
-                    <span className="user-dropdown-endpoint-label">Endpoint</span>
-                    <span className="user-dropdown-endpoint-value">{API_BASE_URL}</span>
-                  </div>
-                  <hr className="user-dropdown-sep" />
-                  <button
-                    className="user-dropdown-item user-dropdown-item-danger"
-                    onClick={() => {
-                      handleLogout();
-                      setIsUserMenuOpen(false);
-                    }}
-                    type="button"
-                  >
-                    Sign out
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </section>
+    <ErrorBoundary>
+      <main className="shell">
+        <Hero
+          session={session}
+          orderCount={orders.length}
+          isLoading={isLoading}
+          userInitials={userInitials}
+          isUserMenuOpen={isUserMenuOpen}
+          onUserMenuToggle={() => setIsUserMenuOpen((current) => !current)}
+          onLogout={handleLogout}
+        />
 
-      <section className="panel panel-console">
-        <div className="panel-header">
-          <div>
-            <h2>Operate the live workflow</h2>
-          </div>
-        </div>
-
-        <div className="summary-strip">
-          {groupedStatuses.map(([status, count]) => (
-            <article className="status-card" key={status}>
-              <span>{statusLabels[status]}</span>
-              <strong>{count}</strong>
-            </article>
-          ))}
-        </div>
-
-        <section className="table-stage">
-          <div className="table-toolbar">
+        <section className="panel panel-console">
+          <div className="panel-header">
             <div>
-              <h3>Review and move orders forward</h3>
+              <h2>Operate the live workflow</h2>
             </div>
           </div>
 
-          <div className="queue-controls">
-            <label className="field queue-search-field">
-              <input
-                aria-label="Search queue"
-                onChange={(event) => {
-                  setSearchQuery(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search code, title, or customer"
-                value={searchQuery}
-              />
-            </label>
+          <StatusSummary groupedStatuses={groupedStatuses} />
 
-            <div className="toolbar-actions">
-              <button
-                className="secondary-action"
-                disabled={isLoading || isRefreshing}
-                onClick={() => void handleRefresh()}
-                type="button"
-              >
-                {isRefreshing ? "Refreshing..." : "Refresh"}
-              </button>
-              <button
-                className="primary-action"
-                onClick={() => setIsCreateOpen((current) => !current)}
-                type="button"
-              >
-                {isCreateOpen ? "Close create form" : "Create order"}
-              </button>
-            </div>
-          </div>
+          <OrderTable
+            orders={orders}
+            paginatedOrders={paginatedOrders}
+            sortedOrders={sortedOrders}
+            lifecycle={lifecycle}
+            isLoading={isLoading}
+            isRefreshing={isRefreshing}
+            isSubmitting={isSubmitting}
+            isOperator={isOperator}
+            isCreateOpen={isCreateOpen}
+            searchQuery={searchQuery}
+            statusFilter={statusFilter}
+            isStatusFilterOpen={isStatusFilterOpen}
+            page={page}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            actionError={actionError}
+            currentCustomer={currentCustomer}
+            selectedOrderId={selectedOrderId}
+            openActionsOrderId={openActionsOrderId}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            syncSource={syncSource}
+            syncNotice={syncNotice}
+            pendingMutationCount={pendingMutationCount}
+            queueNotice={queueNotice}
+            queueError={queueError}
+            error={error}
+            formState={formState}
+            onSearchChange={setSearchQuery}
+            onRefresh={handleRefresh}
+            onToggleCreateOpen={() => setIsCreateOpen((current) => !current)}
+            onCreateOrder={handleCreateOrder}
+            onFormTitleChange={(title) => setFormState((current) => ({ ...current, title }))}
+            onFormDescriptionChange={(description) => setFormState((current) => ({ ...current, description }))}
+            onToggleSort={toggleSort}
+            onToggleStatusFilter={toggleStatusFilter}
+            onToggleStatusFilterOpen={() => setIsStatusFilterOpen((current) => !current)}
+            onSelectOrder={setSelectedOrderId}
+            onToggleActionsOrderId={setOpenActionsOrderId}
+            onTransition={handleTransition}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
 
-          {isCreateOpen ? (
-            <article className="create-reveal">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Create order</p>
-                  <h3>Add a new order to the live queue</h3>
-                </div>
-              </div>
-
-              <form className="create-form create-form-inline" onSubmit={handleCreateOrder}>
-                <label className="field">
-                  <span>Order title</span>
-                  <input
-                    required
-                    minLength={3}
-                    value={formState.title}
-                    onChange={(event) =>
-                      setFormState((current) => ({ ...current, title: event.target.value }))
-                    }
-                    placeholder="Inspect delivery damage"
-                  />
-                </label>
-
-                <label className="field field-wide">
-                  <span>Description</span>
-                  <textarea
-                    value={formState.description}
-                    onChange={(event) =>
-                      setFormState((current) => ({
-                        ...current,
-                        description: event.target.value
-                      }))
-                    }
-                    placeholder="Add context that web and mobile operators should both see."
-                    rows={3}
-                  />
-                </label>
-
-                <button
-                  className="primary-action"
-                  disabled={isSubmitting || !currentCustomer}
-                  type="submit"
-                >
-                  {isSubmitting ? "Submitting..." : "Create order"}
-                </button>
-              </form>
-            </article>
-          ) : null}
-
-          {actionError ? (
-            <div className="feedback-card feedback-error compact">
-              <span className="feedback-eyebrow">Action blocked</span>
-              <strong>Action failed.</strong>
-              <p>{actionError}</p>
-            </div>
-          ) : null}
-
-          {isLoading ? (
-            <div className="feedback-card feedback-sync">
-              <span className="feedback-eyebrow">Live sync</span>
-              <strong>Loading orders from the API</strong>
-              <p>Refreshing the queue snapshot and row actions.</p>
-            </div>
-          ) : null}
-
-          {syncSource === "cached" && syncNotice ? (
-            <div className="feedback-card feedback-sync feedback-cached">
-              <span className="feedback-eyebrow">Cached snapshot</span>
-              <strong>Showing the last successful queue state.</strong>
-              <p>{syncNotice}</p>
-            </div>
-          ) : null}
-
-          {pendingMutationCount > 0 || queueNotice || queueError ? (
-            <div className={`feedback-card compact ${queueError ? "feedback-error" : "feedback-sync"}`}>
-              <span className="feedback-eyebrow">Offline queue</span>
-              <strong>
-                {pendingMutationCount > 0
-                  ? `${pendingMutationCount} queued change${pendingMutationCount === 1 ? "" : "s"} waiting to sync.`
-                  : "Queued changes synced."}
-              </strong>
-              <p>{queueError ?? queueNotice ?? "Queued changes will replay on the next successful refresh."}</p>
-            </div>
-          ) : null}
-
-          {error && syncSource !== "cached" ? (
-            <div className="feedback-card feedback-error">
-              <span className="feedback-eyebrow">Error</span>
-              <strong>Dashboard failed to load.</strong>
-              <p>{error}</p>
-            </div>
-          ) : null}
-
-          {!isLoading && !error ? (
-            <>
-              <div className="table-wrap">
-                <table className="orders-table">
-                <colgroup>
-                  <col className="col-code" />
-                  <col className="col-title" />
-                  <col className="col-customer" />
-                  <col className="col-status" />
-                  <col className="col-updated" />
-                  <col className="col-actions" />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>Code</th>
-                    <th>Title</th>
-                    <th>
-                      <button
-                        className="column-sort"
-                        onClick={() => toggleSort("customer_name")}
-                        type="button"
-                      >
-                        Customer <span>{sortIndicator("customer_name")}</span>
-                      </button>
-                    </th>
-                    <th>
-                      <div className="column-filter-wrap">
-                        <button
-                          className="column-sort"
-                          onClick={() => toggleSort("status")}
-                          type="button"
-                        >
-                          Status <span>{sortIndicator("status")}</span>
-                        </button>
-                        <button
-                          className={`filter-trigger ${statusFilter.length > 0 ? "active" : ""}`}
-                          onClick={() => setIsStatusFilterOpen((current) => !current)}
-                          type="button"
-                        >
-                          Filter
-                        </button>
-                        {isStatusFilterOpen ? (
-                          <div className="filter-menu">
-                            {orderedStatuses.map((status) => (
-                              <label className="filter-option" key={status}>
-                                <input
-                                  checked={statusFilter.includes(status)}
-                                  onChange={() => toggleStatusFilter(status)}
-                                  type="checkbox"
-                                />
-                                <span>{statusLabels[status]}</span>
-                              </label>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    </th>
-                    <th>
-                      <button
-                        className="column-sort"
-                        onClick={() => toggleSort("updated_at")}
-                        type="button"
-                      >
-                        Updated <span>{sortIndicator("updated_at")}</span>
-                      </button>
-                    </th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedOrders.length === 0 ? (
-                    <tr>
-                      <td className="empty-row" colSpan={6}>
-                        <span className="empty-row-eyebrow">No matching orders</span>
-                        <strong>Nothing matches the current queue controls.</strong>
-                        <p>Clear the search or active status filters to bring orders back into view.</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedOrders.map((order) => {
-                      const nextStatuses = lifecycle?.allowed_transitions[order.status] ?? [];
-
-                      return (
-                        <tr
-                          className={selectedOrderId === order.id ? "is-selected" : ""}
-                          key={order.id}
-                          onClick={() => setSelectedOrderId(order.id)}
-                        >
-                          <td className="cell-code">{order.code}</td>
-                          <td className="cell-title">{order.title}</td>
-                          <td className="cell-customer">{order.customer_name}</td>
-                          <td>
-                            <span className={`pill ${statusTone(order.status)}`}>
-                              {statusLabels[order.status]}
-                            </span>
-                          </td>
-                          <td className="cell-updated">{formatTimestamp(order.updated_at)}</td>
-                          <td className="cell-actions">
-                            <div className="table-actions">
-                              {nextStatuses.length === 0 ? (
-                                <span className="transition-terminal">Terminal state</span>
-                              ) : order.id.startsWith("queued-order-") ? (
-                                <span className="transition-terminal">Queued offline</span>
-                              ) : !isOperator ? (
-                                <span className="transition-terminal">Operator only</span>
-                              ) : (
-                                <div className="row-action-menu">
-                                  <button
-                                    className="transition-button transition-trigger"
-                                    onClick={() =>
-                                      setOpenActionsOrderId((current) =>
-                                        current === order.id ? null : order.id
-                                      )
-                                    }
-                                    type="button"
-                                  >
-                                    Change status
-                                  </button>
-                                  {openActionsOrderId === order.id ? (
-                                    <div className="row-dropdown">
-                                      {nextStatuses.map((status) => (
-                                        <button
-                                          key={status}
-                                          className="dropdown-action"
-                                          disabled={isSubmitting}
-                                          onClick={() => void handleTransition(order.id, status)}
-                                          type="button"
-                                        >
-                                          {statusLabels[status]}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {sortedOrders.length > 0 ? (
-              <div className="pagination-bar">
-                <div className="pagination-info">
-                  <span>
-                    Showing {(page - 1) * pageSize + 1}–
-                    {Math.min(page * pageSize, sortedOrders.length)} of {sortedOrders.length} orders
-                  </span>
-                  <label className="page-size-selector">
-                    <span>Per page:</span>
-                    <select
-                      value={pageSize}
-                      onChange={(event) => {
-                        setPageSize(Number(event.target.value));
-                        setPage(1);
-                      }}
-                    >
-                      {[10, 25, 50, 100, 250].map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                {totalPages > 1 ? (
-                  <div className="pagination-controls">
-                    <button
-                      className="pagination-arrow"
-                      disabled={page === 1}
-                      onClick={() => setPage((current) => Math.max(1, current - 1))}
-                      type="button"
-                      aria-label="Previous page"
-                    >
-                      ‹
-                    </button>
-                    <span className="pagination-pages">
-                      {(() => {
-                        // Show current page ±2 (max 5 pages total)
-                        const pages: number[] = [];
-                        for (let offset = -2; offset <= 2; offset++) {
-                          const p = page + offset;
-                          if (p >= 1 && p <= totalPages) {
-                            pages.push(p);
-                          }
-                        }
-
-                        // Insert ellipsis between non-consecutive pages
-                        const result: (number | string)[] = [];
-                        pages.forEach((p, index) => {
-                          if (index > 0 && p - pages[index - 1] > 1) {
-                            result.push("…");
-                          }
-                          result.push(p);
-                        });
-
-                        return result.map((item, index) =>
-                          typeof item === "string" ? (
-                            <span className="pagination-ellipsis" key={`ellipsis-${index}`}>
-                              {item}
-                            </span>
-                          ) : (
-                            <button
-                              className={`pagination-page-btn${item === page ? " active" : ""}`}
-                              key={item}
-                              onClick={() => setPage(item)}
-                              type="button"
-                            >
-                              {item}
-                            </button>
-                          )
-                        );
-                      })()}
-                    </span>
-                    <button
-                      className="pagination-arrow"
-                      disabled={page === totalPages}
-                      onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                      type="button"
-                      aria-label="Next page"
-                    >
-                      ›
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            </>
-          ) : null}
-
-          <section className="detail-inspector">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Order inspector</p>
-                <h3>Comments and workflow history</h3>
-              </div>
-            </div>
-
-            {isDetailLoading ? (
-              <div className="feedback-card feedback-sync">
-                <span className="feedback-eyebrow">Inspector</span>
-                <strong>Loading order detail</strong>
-                <p>Fetching comments, history, and the latest description.</p>
-              </div>
-            ) : null}
-
-            {!isDetailLoading && detailError ? (
-              <article className="inspector-card detail-recovery-card">
-                <span className="feedback-eyebrow">Detail state</span>
-                <strong>Selected order is unavailable.</strong>
-                <p>
-                  {detailError}
-                  {" "}
-                  Refresh the queue or pick another order to keep working.
-                </p>
-                <div className="detail-recovery-actions">
-                  <button
-                    className="secondary-action"
-                    disabled={isRefreshing}
-                    onClick={() => void handleRefresh()}
-                    type="button"
-                  >
-                    {isRefreshing ? "Refreshing..." : "Refresh"}
-                  </button>
-                  <button
-                    className="secondary-action"
-                    onClick={handleClearSelection}
-                    type="button"
-                  >
-                    Clear selection
-                  </button>
-                  {recoveryCandidateOrder ? (
-                    <button
-                      className="primary-action"
-                      onClick={handleRecoverSelection}
-                      type="button"
-                    >
-                      Open {recoveryCandidateOrder.code}
-                    </button>
-                  ) : null}
-                </div>
-              </article>
-            ) : null}
-
-            {!isDetailLoading && !detailError && selectedOrderDetail ? (
-              <div className="inspector-grid">
-                <article className="inspector-card inspector-summary">
-                  <div className="inspector-topline">
-                    <span className="cell-code">{selectedOrderDetail.code}</span>
-                    <span className={`pill ${statusTone(selectedOrderDetail.status)}`}>
-                      {statusLabels[selectedOrderDetail.status]}
-                    </span>
-                  </div>
-                  <h4>{selectedOrderDetail.title}</h4>
-                  <p>{selectedOrderDetail.description || "No description provided yet."}</p>
-
-                  <div className="inspector-meta">
-                    <div>
-                      <span>Customer</span>
-                      <strong>{selectedOrderDetail.customer_name}</strong>
-                    </div>
-                    <div>
-                      <span>Updated</span>
-                      <strong>{formatTimestamp(selectedOrderDetail.updated_at)}</strong>
-                    </div>
-                  </div>
-                </article>
-
-                <article className="inspector-card">
-                  <div className="inspector-section-heading">
-                    <div>
-                      <p className="eyebrow">History</p>
-                      <h4>Recent status movement</h4>
-                    </div>
-                    <span className="inspector-count">{selectedOrderDetail.history.length}</span>
-                  </div>
-
-                  {selectedOrderDetail.history.length === 0 ? (
-                    <div className="mini-empty">No workflow events recorded yet.</div>
-                  ) : (
-                    <div className="timeline-list">
-                      {[...selectedOrderDetail.history].reverse().map((event) => (
-                        <article className="timeline-item" key={event.id}>
-                          <strong>{historySummary(event)}</strong>
-                          <span>
-                            {event.changed_by.name} | {formatTimestamp(event.changed_at)}
-                          </span>
-                          <p>{event.reason}</p>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </article>
-
-                <article className="inspector-card">
-                  <div className="inspector-section-heading">
-                    <div>
-                      <p className="eyebrow">Comments</p>
-                      <h4>{isOperator ? "Operator notes" : "Queue notes"}</h4>
-                    </div>
-                    <span className="inspector-count">{selectedOrderDetail.comments.length}</span>
-                  </div>
-
-                  {isOperator && !selectedOrderIsQueuedDraft ? (
-                    <form className="comment-form" onSubmit={handleAddComment}>
-                      <label className="field field-wide">
-                        <span>Add comment</span>
-                        <textarea
-                          value={commentDraft}
-                          onChange={(event) => setCommentDraft(event.target.value)}
-                          placeholder="Leave a note for the next operator."
-                          rows={3}
-                        />
-                      </label>
-                      <button
-                        className="primary-action"
-                        disabled={isSubmitting || commentDraft.trim().length === 0}
-                        type="submit"
-                      >
-                        {isSubmitting ? "Posting..." : "Post comment"}
-                      </button>
-                    </form>
-                  ) : isOperator ? (
-                    <div className="mini-empty">
-                      Sync queued draft orders before adding comments.
-                    </div>
-                  ) : (
-                    <div className="mini-empty">
-                      Comments are available in operator mode.
-                    </div>
-                  )}
-
-                  {selectedOrderDetail.comments.length === 0 ? (
-                    <div className="mini-empty">No comments yet for this order.</div>
-                  ) : (
-                    <div className="timeline-list">
-                      {[...selectedOrderDetail.comments].reverse().map((comment) => (
-                        <article className="timeline-item" key={comment.id}>
-                          <strong>{comment.author.name}</strong>
-                          <span>{formatTimestamp(comment.created_at)}</span>
-                          <p>{comment.body}</p>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </article>
-              </div>
-            ) : null}
-
-            {!isDetailLoading && !detailError && !selectedOrderDetail ? (
-              <div className="feedback-card feedback-sync">
-                <span className="feedback-eyebrow">Inspector</span>
-                <strong>Select an order to inspect.</strong>
-                <p>Choose any row to review comments, history, and description.</p>
-              </div>
-            ) : null}
-          </section>
+          <OrderInspector
+            selectedOrderDetail={selectedOrderDetail}
+            detailError={detailError}
+            isDetailLoading={isDetailLoading}
+            isRefreshing={isRefreshing}
+            isSubmitting={isSubmitting}
+            isOperator={isOperator}
+            selectedOrderId={selectedOrderId}
+            selectedOrderIsQueuedDraft={selectedOrderIsQueuedDraft}
+            commentDraft={commentDraft}
+            recoveryCandidateOrder={recoveryCandidateOrder}
+            onRefresh={handleRefresh}
+            onClearSelection={handleClearSelection}
+            onRecoverSelection={handleRecoverSelection}
+            onCommentDraftChange={setCommentDraft}
+            onAddComment={handleAddComment}
+          />
         </section>
-      </section>
-    </main>
+      </main>
+    </ErrorBoundary>
   );
 }
