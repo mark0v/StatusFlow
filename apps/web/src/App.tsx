@@ -107,9 +107,11 @@ export default function App() {
   // Derive initials from user name for avatar
   const userInitials = useMemo(() => {
     if (!session?.user?.name) return "?";
-    const parts = session.user.name.trim().split(/\s+/);
+    const trimmed = session.user.name.trim();
+    if (!trimmed) return "?";
+    const parts = trimmed.split(/\s+/);
     if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    return session.user.name.slice(0, 2).toUpperCase();
+    return trimmed.slice(0, 2).toUpperCase();
   }, [session?.user?.name]);
 
   function applyDashboardState(data: {
@@ -1393,39 +1395,21 @@ export default function App() {
                     </button>
                     <span className="pagination-pages">
                       {(() => {
-                        const pages: (number | string)[] = [];
-                        const showPages = new Set<number>();
-
-                        // Always show current page
-                        showPages.add(page);
-
-                        // Show up to 2 neighbors
+                        // Show current page ±2 (max 5 pages total)
+                        const pages: number[] = [];
                         for (let offset = -2; offset <= 2; offset++) {
                           const p = page + offset;
                           if (p >= 1 && p <= totalPages) {
-                            showPages.add(p);
+                            pages.push(p);
                           }
                         }
 
-                        // Limit to max 5 pages total (current + 2 each side)
-                        const sorted = Array.from(showPages).sort((a, b) => a - b);
-                        if (sorted.length > 5) {
-                          const startIdx = Math.max(0, sorted.indexOf(page) - 2);
-                          const selected = sorted.slice(startIdx, startIdx + 5);
-                          selected.forEach((p) => pages.push(p));
-                        } else {
-                          sorted.forEach((p) => pages.push(p));
-                        }
-
-                        // Add ellipsis where needed
+                        // Insert ellipsis between non-consecutive pages
                         const result: (number | string)[] = [];
                         pages.forEach((p, index) => {
-                          if (index > 0 && typeof p === "number" && typeof pages[index - 1] === "number") {
-                            if (p - (pages[index - 1] as number) > 1) {
-                              result.push("…");
-                            }
+                          if (index > 0 && p - pages[index - 1] > 1) {
+                            result.push("…");
                           }
-
                           result.push(p);
                         });
 

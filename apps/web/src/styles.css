@@ -109,38 +109,12 @@ a {
   color: #b8c5d6;
 }
 
-.hero-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.hero-card,
 .panel,
 .order-card {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(10, 19, 36, 0.76);
   backdrop-filter: blur(18px);
   border-radius: 28px;
-}
-
-.hero-card {
-  padding: 15px 16px;
-  display: grid;
-  gap: 6px;
-}
-
-.hero-card span {
-  color: #8ea6c4;
-  font-size: 0.82rem;
-}
-
-.hero-card strong {
-  font-size: 1rem;
-}
-
-.hero-card.accent {
-  background: linear-gradient(135deg, rgba(40, 84, 220, 0.55), rgba(31, 177, 144, 0.24));
 }
 
 .panel {
@@ -235,12 +209,6 @@ a {
   margin-bottom: 12px;
 }
 
-.panel-actions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
 .section-heading,
 .table-toolbar {
   display: flex;
@@ -293,19 +261,6 @@ a {
   padding: 18px;
   display: grid;
   gap: 12px;
-}
-
-.api-link {
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: rgba(141, 178, 255, 0.12);
-  color: #d7e4ff;
-}
-
-.api-link-button {
-  border: 0;
-  font: inherit;
-  cursor: pointer;
 }
 
 /* User avatar + dropdown menu */
@@ -496,48 +451,9 @@ a {
   font-size: 1.3rem;
 }
 
-.queue-snapshot-card {
-  min-width: 260px;
-  max-width: 320px;
-  padding: 14px 16px;
-  border-radius: 20px;
-  background: rgba(16, 29, 52, 0.9);
-  border: 1px solid rgba(141, 178, 255, 0.16);
-  display: grid;
-  gap: 6px;
-}
-
 .feedback-cached {
   border-color: rgba(255, 213, 102, 0.22);
   background: linear-gradient(180deg, rgba(72, 56, 18, 0.72), rgba(23, 19, 11, 0.82));
-}
-
-.queue-snapshot-eyebrow {
-  color: #8db2ff;
-  font-size: 0.72rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.queue-snapshot-card strong,
-.queue-snapshot-card p,
-.queue-snapshot-meta {
-  margin: 0;
-}
-
-.queue-snapshot-card strong {
-  font-size: 1rem;
-  color: #f0f4fb;
-}
-
-.queue-snapshot-card p {
-  color: #b8c5d6;
-  font-size: 0.86rem;
-}
-
-.queue-snapshot-meta {
-  color: #8ea6c4;
-  font-size: 0.78rem;
 }
 
 .table-wrap {
@@ -705,27 +621,6 @@ a {
 
 .pagination-arrow:disabled {
   opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.pagination-btn {
-  background: rgba(9, 17, 31, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  color: #e8edf2;
-  padding: 6px 14px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.pagination-btn:hover:not(:disabled) {
-  background: rgba(90, 123, 255, 0.15);
-  border-color: rgba(90, 123, 255, 0.4);
-}
-
-.pagination-btn:disabled {
-  opacity: 0.4;
   cursor: not-allowed;
 }
 
@@ -1199,8 +1094,7 @@ a {
     align-items: start;
   }
 
-  .queue-search-field,
-  .queue-snapshot-card {
+  .queue-search-field {
     min-width: 0;
     width: 100%;
     max-width: none;
