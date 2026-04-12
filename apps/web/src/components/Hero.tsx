@@ -10,6 +10,7 @@ interface Props {
   isUserMenuOpen: boolean;
   onUserMenuToggle: () => void;
   onLogout: () => void;
+  userRole: string;
 }
 
 export function Hero({
@@ -19,14 +20,16 @@ export function Hero({
   userInitials,
   isUserMenuOpen,
   onUserMenuToggle,
-  onLogout
+  onLogout,
+  userRole
 }: Props) {
+  const isOperator = userRole === "operator";
   return (
     <section className="hero">
       <div className="hero-top">
         <div className="hero-brand">
           <img
-            alt="StatusFlow operator console"
+            alt={`StatusFlow ${isOperator ? "operator" : "customer"} console`}
             className="hero-logo"
             src={statusFlowLogo}
           />

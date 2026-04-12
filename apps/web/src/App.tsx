@@ -474,10 +474,12 @@ export default function App() {
     [users]
   );
   const isOperator = session?.user.role === "operator";
-  const consoleTitle = isOperator ? "Operate the live workflow" : "Track the live workflow";
+  const consoleTitle = isOperator
+    ? "Today's queue"
+    : "My requests";
   const queueSectionTitle = isOperator
-    ? "Review and move orders forward"
-    : "Track your orders across the live workflow";
+    ? "Keep requests moving"
+    : "Track status and updates";
   const currentCustomer = useMemo(() => resolveCurrentCustomer(users, session), [session, users]);
   const recoveryCandidateOrder = useMemo(
     () => resolveRecoveryCandidateOrder(orders, selectedOrderId),
@@ -974,6 +976,7 @@ export default function App() {
           isUserMenuOpen={isUserMenuOpen}
           onUserMenuToggle={() => setIsUserMenuOpen((current) => !current)}
           onLogout={handleLogout}
+          userRole={session.user.role}
         />
 
         <section className="panel panel-console">
