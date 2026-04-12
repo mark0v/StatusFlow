@@ -102,6 +102,15 @@ export default function App() {
   const [queueError, setQueueError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  // Derive initials from user name for avatar
+  const userInitials = useMemo(() => {
+    if (!session?.user?.name) return "?";
+    const parts = session.user.name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return session.user.name.slice(0, 2).toUpperCase();
+  }, [session?.user?.name]);
 
   function applyDashboardState(data: {
     orders: OrderCard[];
@@ -451,6 +460,10 @@ export default function App() {
 
       if (!target.closest(".row-action-menu")) {
         setOpenActionsOrderId(null);
+      }
+
+      if (!target.closest(".user-menu-wrap")) {
+        setIsUserMenuOpen(false);
       }
     }
 
@@ -991,45 +1004,69 @@ export default function App() {
   return (
     <main className="shell">
       <section className="hero">
-        <img
-          alt="StatusFlow operator console"
-          className="hero-logo"
-          src={statusFlowLogo}
-        />
-        <p className="lead">
-          Queue-first console for fast operator work across the shared web and
-          mobile workflow.
-        </p>
-
-        <div className="hero-grid">
-          <article className="hero-card accent">
-            <span>Orders from API</span>
-            <strong>{isLoading ? "Loading..." : `${orders.length} tracked orders`}</strong>
-          </article>
-          <article className="hero-card">
-            <span>Signed in</span>
-            <strong>{session.user.name} | {session.user.role}</strong>
-          </article>
-          <article className="hero-card">
-            <span>Live endpoint</span>
-            <strong>{API_BASE_URL}</strong>
-          </article>
+        <div className="hero-top">
+          <div className="hero-brand">
+            <img
+              alt="StatusFlow operator console"
+              className="hero-logo"
+              src={statusFlowLogo}
+            />
+          </div>
+          <div className="hero-actions">
+            <span className="hero-order-count">
+              {isLoading ? "…" : `${orders.length} orders`}
+            </span>
+            <div className="user-menu-wrap">
+              <button
+                className="user-avatar-btn"
+                onClick={() => setIsUserMenuOpen((current) => !current)}
+                aria-label="User menu"
+                aria-expanded={isUserMenuOpen}
+                type="button"
+              >
+                <span className="user-avatar-initials">{userInitials}</span>
+              </button>
+              {isUserMenuOpen ? (
+                <div className="user-dropdown">
+                  <div className="user-dropdown-info">
+                    <span className="user-dropdown-name">{session.user.name}</span>
+                    <span className="user-dropdown-role">{session.user.role}</span>
+                  </div>
+                  <hr className="user-dropdown-sep" />
+                  <a
+                    className="user-dropdown-item"
+                    href={`${API_BASE_URL}/docs`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    API docs
+                  </a>
+                  <div className="user-dropdown-item user-dropdown-endpoint">
+                    <span className="user-dropdown-endpoint-label">Endpoint</span>
+                    <span className="user-dropdown-endpoint-value">{API_BASE_URL}</span>
+                  </div>
+                  <hr className="user-dropdown-sep" />
+                  <button
+                    className="user-dropdown-item user-dropdown-item-danger"
+                    onClick={() => {
+                      handleLogout();
+                      setIsUserMenuOpen(false);
+                    }}
+                    type="button"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="panel panel-console">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Queue Console</p>
             <h2>Operate the live workflow</h2>
-          </div>
-          <div className="panel-actions">
-            <a className="api-link" href={`${API_BASE_URL}/docs`}>
-              Open API docs
-            </a>
-            <button className="api-link api-link-button" onClick={handleLogout} type="button">
-              Sign out
-            </button>
           </div>
         </div>
 
@@ -1045,41 +1082,12 @@ export default function App() {
         <section className="table-stage">
           <div className="table-toolbar">
             <div>
-              <p className="eyebrow">Active queue</p>
               <h3>Review and move orders forward</h3>
             </div>
-            <article aria-live="polite" className="queue-snapshot-card">
-              <span className="queue-snapshot-eyebrow">Queue snapshot</span>
-              <strong>
-                {isLoading
-                  ? "Syncing first snapshot"
-                  : isRefreshing
-                    ? "Refreshing live queue"
-                    : syncSource === "cached"
-                      ? "Cached view"
-                      : error
-                      ? "Refresh needs attention"
-                      : "Live queue"}
-              </strong>
-              <p>
-                {syncSource === "cached" && syncNotice
-                  ? `${syncNotice} Last sync ${lastRefreshedAt ? formatTimestamp(lastRefreshedAt) : "unknown"}`
-                  : error
-                    ? error
-                  : lastRefreshedAt
-                    ? `Last sync ${formatTimestamp(lastRefreshedAt)}`
-                    : "Waiting for the first successful sync."}
-              </p>
-              <span className="queue-snapshot-meta">
-                Showing {filteredOrders.length} of {orders.length} orders
-                {pendingMutationCount > 0 ? ` · Pending sync ${pendingMutationCount}` : ""}
-              </span>
-            </article>
           </div>
 
           <div className="queue-controls">
             <label className="field queue-search-field">
-              <span>Search queue</span>
               <input
                 aria-label="Search queue"
                 onChange={(event) => {
@@ -1375,30 +1383,53 @@ export default function App() {
                 {totalPages > 1 ? (
                   <div className="pagination-controls">
                     <button
-                      className="pagination-btn"
+                      className="pagination-arrow"
                       disabled={page === 1}
                       onClick={() => setPage((current) => Math.max(1, current - 1))}
                       type="button"
+                      aria-label="Previous page"
                     >
-                      Previous
+                      ‹
                     </button>
                     <span className="pagination-pages">
-                      {Array.from({ length: totalPages }, (_, index) => index + 1)
-                        .filter((pageNumber) => {
-                          if (totalPages <= 7) return true;
-                          if (pageNumber === 1 || pageNumber === totalPages) return true;
-                          if (Math.abs(pageNumber - page) <= 1) return true;
-                          return false;
-                        })
-                        .reduce<(number | string)[]>((accumulator, pageNumber, index, array) => {
-                          if (index > 0 && pageNumber !== array[index - 1] + 1) {
-                            accumulator.push("…");
+                      {(() => {
+                        const pages: (number | string)[] = [];
+                        const showPages = new Set<number>();
+
+                        // Always show current page
+                        showPages.add(page);
+
+                        // Show up to 2 neighbors
+                        for (let offset = -2; offset <= 2; offset++) {
+                          const p = page + offset;
+                          if (p >= 1 && p <= totalPages) {
+                            showPages.add(p);
+                          }
+                        }
+
+                        // Limit to max 5 pages total (current + 2 each side)
+                        const sorted = Array.from(showPages).sort((a, b) => a - b);
+                        if (sorted.length > 5) {
+                          const startIdx = Math.max(0, sorted.indexOf(page) - 2);
+                          const selected = sorted.slice(startIdx, startIdx + 5);
+                          selected.forEach((p) => pages.push(p));
+                        } else {
+                          sorted.forEach((p) => pages.push(p));
+                        }
+
+                        // Add ellipsis where needed
+                        const result: (number | string)[] = [];
+                        pages.forEach((p, index) => {
+                          if (index > 0 && typeof p === "number" && typeof pages[index - 1] === "number") {
+                            if (p - (pages[index - 1] as number) > 1) {
+                              result.push("…");
+                            }
                           }
 
-                          accumulator.push(pageNumber);
-                          return accumulator;
-                        }, [])
-                        .map((item, index) =>
+                          result.push(p);
+                        });
+
+                        return result.map((item, index) =>
                           typeof item === "string" ? (
                             <span className="pagination-ellipsis" key={`ellipsis-${index}`}>
                               {item}
@@ -1413,15 +1444,17 @@ export default function App() {
                               {item}
                             </button>
                           )
-                        )}
+                        );
+                      })()}
                     </span>
                     <button
-                      className="pagination-btn"
+                      className="pagination-arrow"
                       disabled={page === totalPages}
                       onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                       type="button"
+                      aria-label="Next page"
                     >
-                      Next
+                      ›
                     </button>
                   </div>
                 ) : null}
