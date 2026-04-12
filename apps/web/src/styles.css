@@ -466,6 +466,111 @@ a {
   text-align: right;
 }
 
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 4px;
+  flex-wrap: wrap;
+}
+
+.pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #8ea6c4;
+  font-size: 0.85rem;
+}
+
+.page-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #8ea6c4;
+  font-size: 0.85rem;
+}
+
+.page-size-selector select {
+  background: rgba(9, 17, 31, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #e8edf2;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.page-size-selector select:focus {
+  outline: none;
+  border-color: rgba(90, 123, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(90, 123, 255, 0.15);
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pagination-btn {
+  background: rgba(9, 17, 31, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #e8edf2;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: rgba(90, 123, 255, 0.15);
+  border-color: rgba(90, 123, 255, 0.4);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination-ellipsis {
+  color: #8ea6c4;
+  padding: 0 4px;
+  user-select: none;
+}
+
+.pagination-page-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #8ea6c4;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 32px;
+}
+
+.pagination-page-btn:hover {
+  background: rgba(90, 123, 255, 0.15);
+  color: #e8edf2;
+}
+
+.pagination-page-btn.active {
+  background: rgba(90, 123, 255, 0.25);
+  border-color: rgba(90, 123, 255, 0.5);
+  color: #e8edf2;
+  font-weight: 600;
+}
+
 .detail-inspector {
   display: grid;
   gap: 14px;

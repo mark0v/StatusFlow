@@ -100,6 +100,8 @@ export default function App() {
   const [pendingMutations, setPendingMutations] = useState<QueuedMutation[]>([]);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   function applyDashboardState(data: {
     orders: OrderCard[];
@@ -477,17 +479,22 @@ export default function App() {
     () => sortOrders(filteredOrders, sortField, sortDirection),
     [filteredOrders, sortDirection, sortField]
   );
+  const totalPages = Math.ceil(sortedOrders.length / pageSize);
+  const paginatedOrders = useMemo(
+    () => sortedOrders.slice((page - 1) * pageSize, page * pageSize),
+    [sortedOrders, page, pageSize]
+  );
   const pendingMutationCount = pendingMutations.length;
   const selectedOrderIsQueuedDraft = selectedOrderId?.startsWith("queued-order-") ?? false;
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
-      return;
+    } else {
+      setSortField(field);
+      setSortDirection(field === "updated_at" ? "desc" : "asc");
     }
-
-    setSortField(field);
-    setSortDirection(field === "updated_at" ? "desc" : "asc");
+    setPage(1);
   }
 
   function toggleStatusFilter(status: OrderStatus) {
@@ -496,6 +503,7 @@ export default function App() {
         ? current.filter((entry) => entry !== status)
         : [...current, status]
     );
+    setPage(1);
   }
 
   function sortIndicator(field: SortField) {
@@ -690,6 +698,7 @@ export default function App() {
     setIsCreateOpen(false);
     setOpenActionsOrderId(null);
     setSearchQuery("");
+    setPage(1);
     setIsRefreshing(false);
     setLastRefreshedAt(null);
     setSyncSource("live");
@@ -1062,7 +1071,7 @@ export default function App() {
                     : "Waiting for the first successful sync."}
               </p>
               <span className="queue-snapshot-meta">
-                Showing {sortedOrders.length} of {orders.length} orders
+                Showing {filteredOrders.length} of {orders.length} orders
                 {pendingMutationCount > 0 ? ` · Pending sync ${pendingMutationCount}` : ""}
               </span>
             </article>
@@ -1073,7 +1082,10 @@ export default function App() {
               <span>Search queue</span>
               <input
                 aria-label="Search queue"
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                  setPage(1);
+                }}
                 placeholder="Search code, title, or customer"
                 value={searchQuery}
               />
@@ -1192,8 +1204,9 @@ export default function App() {
           ) : null}
 
           {!isLoading && !error ? (
-            <div className="table-wrap">
-              <table className="orders-table">
+            <>
+              <div className="table-wrap">
+                <table className="orders-table">
                 <colgroup>
                   <col className="col-code" />
                   <col className="col-title" />
@@ -1260,7 +1273,7 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedOrders.length === 0 ? (
+                  {paginatedOrders.length === 0 ? (
                     <tr>
                       <td className="empty-row" colSpan={6}>
                         <span className="empty-row-eyebrow">No matching orders</span>
@@ -1269,7 +1282,7 @@ export default function App() {
                       </td>
                     </tr>
                   ) : (
-                    sortedOrders.map((order) => {
+                    paginatedOrders.map((order) => {
                       const nextStatuses = lifecycle?.allowed_transitions[order.status] ?? [];
 
                       return (
@@ -1334,6 +1347,87 @@ export default function App() {
                 </tbody>
               </table>
             </div>
+
+            {sortedOrders.length > 0 ? (
+              <div className="pagination-bar">
+                <div className="pagination-info">
+                  <span>
+                    Showing {(page - 1) * pageSize + 1}–
+                    {Math.min(page * pageSize, sortedOrders.length)} of {sortedOrders.length} orders
+                  </span>
+                  <label className="page-size-selector">
+                    <span>Per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(event) => {
+                        setPageSize(Number(event.target.value));
+                        setPage(1);
+                      }}
+                    >
+                      {[10, 25, 50, 100, 250].map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {totalPages > 1 ? (
+                  <div className="pagination-controls">
+                    <button
+                      className="pagination-btn"
+                      disabled={page === 1}
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                      type="button"
+                    >
+                      Previous
+                    </button>
+                    <span className="pagination-pages">
+                      {Array.from({ length: totalPages }, (_, index) => index + 1)
+                        .filter((pageNumber) => {
+                          if (totalPages <= 7) return true;
+                          if (pageNumber === 1 || pageNumber === totalPages) return true;
+                          if (Math.abs(pageNumber - page) <= 1) return true;
+                          return false;
+                        })
+                        .reduce<(number | string)[]>((accumulator, pageNumber, index, array) => {
+                          if (index > 0 && pageNumber !== array[index - 1] + 1) {
+                            accumulator.push("…");
+                          }
+
+                          accumulator.push(pageNumber);
+                          return accumulator;
+                        }, [])
+                        .map((item, index) =>
+                          typeof item === "string" ? (
+                            <span className="pagination-ellipsis" key={`ellipsis-${index}`}>
+                              {item}
+                            </span>
+                          ) : (
+                            <button
+                              className={`pagination-page-btn${item === page ? " active" : ""}`}
+                              key={item}
+                              onClick={() => setPage(item)}
+                              type="button"
+                            >
+                              {item}
+                            </button>
+                          )
+                        )}
+                    </span>
+                    <button
+                      className="pagination-btn"
+                      disabled={page === totalPages}
+                      onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                      type="button"
+                    >
+                      Next
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            </>
           ) : null}
 
           <section className="detail-inspector">

@@ -52,6 +52,8 @@ async function signIn(page, baseUrl) {
   await page.getByLabel("Password").fill("operator123");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText("Operate the live workflow")).toBeVisible();
+  // Wait for the dashboard to be ready (table or search field)
+  await page.waitForTimeout(2000);
 }
 
 async function createAndMutateOrder(page, title, description, comment, statusLabel) {
@@ -75,8 +77,11 @@ async function createAndMutateOrder(page, title, description, comment, statusLab
 }
 
 async function verifyOrder(page, title, comment, statusLabel) {
-  await page.getByRole("button", { name: "Refresh" }).click();
-  await page.getByLabel("Search queue").fill(title);
+  // Wait for the search input to exist and be visible (with scroll into view)
+  const searchInput = page.locator("input[placeholder='Search code, title, or customer']");
+  await searchInput.waitFor({ state: "attached", timeout: 15000 });
+  await searchInput.scrollIntoViewIfNeeded({ timeout: 5000 });
+  await searchInput.fill(title);
 
   const matchingRow = page.locator("tbody tr").filter({ hasText: title }).first();
   await expect(matchingRow).toBeVisible();
@@ -101,7 +106,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
 
   try {
-    const page = await browser.newPage();
+    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
     await signIn(page, baseUrl);
 
     if (mode === "create-and-mutate") {

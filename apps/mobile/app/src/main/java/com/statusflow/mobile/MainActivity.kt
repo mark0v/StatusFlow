@@ -92,7 +92,12 @@ class MainActivity : ComponentActivity() {
 
         // Debug/test hook: allow opening a specific order by ID via intent extra
         // Usage: adb shell am start -n com.statusflow.mobile/.MainActivity --es debug_order_id "order-123"
-        val debugOrderId = intent.getStringExtra("debug_order_id")
+        // This is only enabled in debug builds for testing purposes
+        val debugOrderId = if (BuildConfig.DEBUG_INTENT_HOOK_ENABLED) {
+            intent.getStringExtra("debug_order_id")
+        } else {
+            null
+        }
 
         setContent {
             StatusFlowTheme {
@@ -106,13 +111,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         // Handle intent updates while activity is already running
-        val debugOrderId = intent.getStringExtra("debug_order_id")
-        if (debugOrderId != null) {
-            // The activity will recompose with the new value
-            setContent {
-                StatusFlowTheme {
-                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        MobileHomeRoute(initialSelectedOrderId = debugOrderId)
+        if (BuildConfig.DEBUG_INTENT_HOOK_ENABLED) {
+            val debugOrderId = intent.getStringExtra("debug_order_id")
+            if (debugOrderId != null) {
+                // The activity will recompose with the new value
+                setContent {
+                    StatusFlowTheme {
+                        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                            MobileHomeRoute(initialSelectedOrderId = debugOrderId)
+                        }
                     }
                 }
             }

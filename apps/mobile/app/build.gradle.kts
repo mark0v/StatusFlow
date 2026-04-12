@@ -26,8 +26,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("Boolean", "DEBUG_INTENT_HOOK_ENABLED", "true")
+        }
         release {
             isMinifyEnabled = false
+            buildConfigField("Boolean", "DEBUG_INTENT_HOOK_ENABLED", "false")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
