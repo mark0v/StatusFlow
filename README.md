@@ -45,14 +45,61 @@ What already works:
 
 What is not finished yet:
 
-- authentication and session handling
-- mobile local cache with Room and offline sync behavior
-- web comments/history operator workflow polish
 - stronger end-to-end synchronization coverage across both clients
+- a fully reliable cross-client parity smoke for `web -> mobile` and `mobile -> web`
 - production readiness concerns such as deployment, auth hardening, and observability
 
 ## Local development
 
-- `docker compose up --build api web postgres` runs the backend stack
-- `apps/mobile/` contains the Android/Jetpack Compose starter project and runs separately in Android Studio
-- `docs/LOCAL_DEV_LOOP.md` describes the current end-to-end local workflow
+Start the shared backend and web stack:
+
+```bash
+docker compose up -d --build postgres api web
+```
+
+Key local URLs:
+
+- API: `http://localhost:8000`
+- Swagger: `http://localhost:8000/docs`
+- Web: `http://localhost:3000`
+
+Run the mobile app separately from `apps/mobile/`:
+
+```powershell
+cd apps/mobile
+.\gradlew.bat assembleDebug
+```
+
+Useful scripts from the repo root:
+
+- `powershell -ExecutionPolicy Bypass -File scripts/e2e-smoke.ps1`
+- `powershell -ExecutionPolicy Bypass -File scripts/mobile-smoke.ps1 -StartEmulator`
+- `powershell -ExecutionPolicy Bypass -File scripts/cross-client-sync.ps1 -StartEmulator`
+
+## Test commands
+
+Web:
+
+```bash
+npm.cmd run test --workspace apps/web
+npm.cmd run build --workspace apps/web
+npm.cmd run test:e2e --workspace apps/web
+```
+
+API:
+
+```powershell
+python -m pip install --target .test-deps -r apps/api/requirements-dev.txt
+$env:PYTHONPATH='.test-deps;apps/api'
+python -m pytest apps/api/tests -q
+```
+
+Mobile:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/mobile-smoke.ps1 -StartEmulator
+cd apps/mobile
+.\gradlew.bat connectedDebugAndroidTest
+```
+
+`docs/LOCAL_DEV_LOOP.md` describes the current end-to-end workflow in more detail.

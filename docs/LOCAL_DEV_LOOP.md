@@ -21,6 +21,14 @@ Key local URLs:
 - Swagger: `http://localhost:8000/docs`
 - Web dashboard: `http://localhost:3000`
 
+## Web checks
+
+```bash
+npm.cmd run test --workspace apps/web
+npm.cmd run build --workspace apps/web
+npm.cmd run test:e2e --workspace apps/web
+```
+
 ## Build the mobile app
 
 ```bash
@@ -50,6 +58,33 @@ This script:
 - adds a comment
 - performs a valid status transition
 - verifies an invalid backward transition returns `422`
+
+## Mobile checks
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/mobile-smoke.ps1 -StartEmulator
+cd apps/mobile
+.\gradlew.bat connectedDebugAndroidTest
+```
+
+## Cross-client parity smoke
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/cross-client-sync.ps1 -StartEmulator
+```
+
+Current status:
+
+- `web -> mobile` and `mobile -> web` orchestration is in place
+- the script already builds/installs mobile, seeds the operator session, drives the web console through Playwright, and captures mobile/web artifacts
+- the remaining flaky edge is the Android adb navigation from a filtered queue card into the exact detail/comments screen for the newly created web order
+
+Artifacts currently written to `outputs/mobile-ui/` include:
+
+- `cross-client-mobile.png`
+- `cross-client-mobile.xml`
+- `cross-client-web-create.png`
+- `cross-client-web-verify.png`
 
 ## Manual end-to-end scenario
 

@@ -64,15 +64,16 @@ powershell -ExecutionPolicy Bypass -File scripts/cross-client-sync.ps1 -StartEmu
 This scenario:
 
 - seeds the Android app with the operator session used for sync verification
-- creates a fresh order through the live backend
-- transitions it to `in_review`
-- adds a live operator comment
-- refreshes the mobile queue and verifies the new order, status, and comment are visible in the app
+- drives a live `web -> mobile` scenario by creating, transitioning, and commenting on an order in the web console, then verifying the refreshed Android UI
+- drives a live `mobile -> web` scenario by creating, transitioning, and commenting on an order in the Android app, then verifying the refreshed web console
+- saves the latest mobile screenshot/UI dump plus web verification screenshots for both directions
 
 Artifacts are written to:
 
 - `outputs/mobile-ui/cross-client-mobile.png`
 - `outputs/mobile-ui/cross-client-mobile.xml`
+- `outputs/mobile-ui/cross-client-web-create.png`
+- `outputs/mobile-ui/cross-client-web-verify.png`
 
 ## Compose UI instrumentation
 

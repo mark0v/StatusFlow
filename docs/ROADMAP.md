@@ -41,27 +41,31 @@ Missing for v1:
 
 ### Web
 
-Status: operator MVP is real and usable
+Status: cross-client operator console is real and close to parity with mobile
 
 Done:
 - live table-first operator console
 - inline create-order reveal flow
 - row-level status actions
-- sort/filter controls
+- sort/filter/search controls
 - static queue counters
+- customer mode parity
+- comments and history surfaced in the inspector
+- cached dashboard/detail fallback
+- detail recovery state
+- offline mutation queue for create/comment/status
 - favicon, manifest, browser metadata
 - mocked UI tests
 - live Playwright end-to-end tests
 
 Missing for v1:
-- comments and history surfaced in the web UI
-- clearer empty/error/loading polish for all edge cases
+- a fully green bidirectional cross-client parity smoke against Android
 - accessibility pass on table controls and dropdowns
 - finer-grained operator productivity features only if truly needed after comments/history land
 
 ### Mobile
 
-Status: strongest UX foundation in the repo right now
+Status: strongest sync-aware UX foundation in the repo right now
 
 Done:
 - queue-first mobile layout
@@ -74,11 +78,11 @@ Done:
 - accessibility semantics pass
 - device smoke script
 - Compose instrumentation tests on emulator
-
-Missing for v1:
 - Room cache
 - offline mode and reconnect reconciliation
 - explicit sync metadata such as last successful refresh
+
+Missing for v1:
 - authentication/session flow
 - stronger semantics assertions and broader device coverage
 
@@ -96,12 +100,38 @@ Against that goal:
 
 - shared workflow: largely achieved for MVP
 - status lifecycle correctness: achieved for current scope
-- client parity: partially achieved
+- client parity: largely achieved for create/comment/status/history across both clients
 - testing depth: good on API and web, emerging on mobile
-- offline/sync realism: not achieved yet
+- offline/sync realism: achieved in both clients, but cross-client smoke still needs one more reliability pass
 - auth realism: not achieved yet
 
 That means we are past the "can this product exist?" stage and squarely in the "make the system realistic and trustworthy" stage.
+
+## Current parity plan
+
+Completed:
+
+1. `WQ-1` web queue controls parity
+2. `WQ-2` web customer mode parity
+3. `WQ-3` web detail recovery state
+4. `WQ-4` web parity test expansion
+5. `WQ-5` extract web data and sync layer
+6. `WQ-6` cached dashboard/detail foundation
+7. `WQ-7` web offline mutation queue
+
+In progress:
+
+8. `WQ-8` cross-client parity smoke
+
+Current blocker inside `WQ-8`:
+
+- the shared smoke script can already drive the web console and mobile app in one flow, but Android adb navigation is still flaky when opening the exact freshly synced web-created order detail/comments view
+
+Immediate next actions:
+
+1. make the mobile detail-open step deterministic, ideally through a small debug/test hook that opens detail by `orderId`
+2. rerun `scripts/cross-client-sync.ps1` until both `web -> mobile` and `mobile -> web` directions are green
+3. once the parity smoke is green, tighten artifact naming/assertions and move the script back into a “done” state
 
 ## Updated top-level plan
 
@@ -110,14 +140,14 @@ That means we are past the "can this product exist?" stage and squarely in the "
 This is the most important phase now.
 
 1. Add authentication to API, web, and mobile.
-2. Add Room cache and sync model to mobile.
-3. Expose comments and history properly in web.
-4. Add explicit sync state in mobile: last refresh, stale state, retry messaging.
-5. Extend end-to-end tests to cover cross-client create/update visibility.
+2. Finish the last flaky gap in cross-client parity smoke.
+3. Extend end-to-end tests to cover cross-client create/update visibility more routinely.
+4. Add stronger auth/session realism and hardening.
+5. Keep tightening failure-state and observability coverage.
 
 Exit criteria:
 - a user can authenticate
-- mobile can survive temporary network loss with local data
+- mobile and web can survive temporary network loss with local data
 - operator actions in web are visible in mobile after sync
 - test suite covers the main shared flow end to end
 
@@ -156,9 +186,9 @@ Exit criteria:
 
 If we optimize for the actual end goal, not just visible progress, the best order now is:
 
-1. Authentication foundation
-2. Mobile Room cache and offline sync
-3. Web comments/history surface
-4. Cross-client end-to-end synchronization tests
+1. Close the last `WQ-8` Android detail-navigation flake
+2. Authentication foundation
+3. Harden cross-client end-to-end synchronization tests
+4. Observability and failure diagnostics
 
 That is the shortest path from "nice working demo" to "realistic system for testing synchronization behavior."

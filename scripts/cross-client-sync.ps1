@@ -2,6 +2,7 @@ param(
     [string]$AvdName = "StatusFlow_API_34",
     [string]$OutputDir = "outputs/mobile-ui",
     [string]$ApiBaseUrl = "http://10.0.2.2:8000",
+    [string]$WebBaseUrl = "http://127.0.0.1:3000",
     [switch]$SkipBuild,
     [switch]$StartEmulator
 )
@@ -22,6 +23,9 @@ $screenshotPath = Join-Path $resolvedOutputDir "cross-client-mobile.png"
 $remoteDumpPath = "/sdcard/statusflow-cross-client.xml"
 $remoteScreenshotPath = "/sdcard/statusflow-cross-client.png"
 $webApiBaseUrl = $ApiBaseUrl.Replace("10.0.2.2", "localhost")
+$webCreateScreenshotPath = Join-Path $resolvedOutputDir "cross-client-web-create.png"
+$webVerifyScreenshotPath = Join-Path $resolvedOutputDir "cross-client-web-verify.png"
+$webDriverPath = Join-Path $repoRoot "apps\web\tests\e2e\cross-client-driver.mjs"
 $originalHome = $env:HOME
 $originalUserProfile = $env:USERPROFILE
 $originalHomeDrive = $env:HOMEDRIVE
@@ -33,6 +37,14 @@ foreach ($requiredPath in @($adbPath, $gradleWrapper, $jdkRoot)) {
     if (-not (Test-Path $requiredPath)) {
         throw "Required path not found: $requiredPath"
     }
+}
+
+if (-not (Test-Path $webDriverPath)) {
+    throw "Cross-client web driver not found at $webDriverPath"
+}
+
+if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    throw "Node.js must be available on PATH to run the web cross-client smoke."
 }
 
 if ($StartEmulator -and -not (Test-Path $emulatorPath)) {
@@ -220,6 +232,23 @@ function Get-FirstVisibleOrderCardNode {
     return $fallbackNode
 }
 
+function Get-OrderCardNodeByMarker {
+    param(
+        [Parameter(Mandatory = $true)][xml]$Xml,
+        [Parameter(Mandatory = $true)][string]$Marker
+    )
+
+    $nodes = @($Xml.SelectNodes("//node"))
+    foreach ($node in $nodes) {
+        $contentDesc = [string]$node.'content-desc'
+        if ($contentDesc -like "Open order *" -and $contentDesc -like "*$Marker*") {
+            return $node
+        }
+    }
+
+    return $null
+}
+
 function Invoke-UiTapNode {
     param([Parameter(Mandatory = $true)]$Node)
 
@@ -244,6 +273,12 @@ function Scroll-Up {
     Enable-AdbEnvironment
     Invoke-NativeCommand -FilePath $adbPath -ArgumentList @("shell", "input", "swipe", "540", "900", "540", "1850", "250") -FailureMessage "Scroll up gesture failed." | Out-Null
     Start-Sleep -Seconds 1
+}
+
+function Scroll-ToQueueTop {
+    1..4 | ForEach-Object {
+        Scroll-Up
+    }
 }
 
 function Refresh-MobileQueue {
@@ -466,6 +501,157 @@ function Ensure-MobileSignedIn {
     throw "Timed out waiting for the mobile app to leave the login screen."
 }
 
+function Assert-LiveStackReady {
+    try {
+        $health = Invoke-RestMethod -Uri "$webApiBaseUrl/health"
+        if ($health.status -ne "ok") {
+            throw "API health returned '$($health.status)'."
+        }
+    } catch {
+        throw "StatusFlow API is not reachable at $webApiBaseUrl. Start the live stack before running cross-client parity smoke. $($_.Exception.Message)"
+    }
+
+    try {
+        $null = Invoke-WebRequest -Uri $WebBaseUrl -UseBasicParsing
+    } catch {
+        throw "StatusFlow web app is not reachable at $WebBaseUrl. Start the live web console before running cross-client parity smoke. $($_.Exception.Message)"
+    }
+}
+
+function Reset-MobileQueueScreen {
+    Stop-MobileApp
+    Start-MobileApp
+    Ensure-MobileSignedIn
+    Wait-ForUiText -Text "Queue snapshot" -TimeoutSec 20 | Out-Null
+}
+
+function Focus-MobileSelectedOrderDetail {
+    Wait-ForUiText -Text "Selected for detail view" -TimeoutSec 20 | Out-Null
+    Tap-SelectedOrderCard
+    Wait-ForUiText -Text "Selected order" -AllowScroll -TimeoutSec 20 | Out-Null
+}
+
+function Wait-ForMobileOrderCard {
+    param(
+        [Parameter(Mandatory = $true)][string]$Marker,
+        [int]$TimeoutSec = 40
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    do {
+        $xml = Get-UiXml
+        $node = Get-OrderCardNodeByMarker -Xml $xml -Marker $Marker
+        if ($node) {
+            return @{ Xml = $xml; Node = $node }
+        }
+
+        Scroll-Down
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Timed out waiting for mobile order card marker: $Marker"
+}
+
+function Wait-ForMobileOrderCardSelection {
+    param(
+        [Parameter(Mandatory = $true)][string]$Marker,
+        [int]$TimeoutSec = 20
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    do {
+        $xml = Get-UiXml
+        $node = Get-OrderCardNodeByMarker -Xml $xml -Marker $Marker
+        if ($node -and $node.ParentNode -and ([string]$node.ParentNode.OuterXml) -like "*Selected for detail view*") {
+            return @{ Xml = $xml; Node = $node }
+        }
+
+        Start-Sleep -Seconds 1
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Timed out waiting for mobile order selection: $Marker"
+}
+
+function Open-MobileOrderByText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [switch]$Contains
+    )
+
+    if ($Contains) {
+        $result = Wait-ForMobileOrderCard -Marker $Text -TimeoutSec 40
+    } else {
+        $result = Wait-ForUiText -Text $Text -TimeoutSec 40
+    }
+
+    Invoke-UiTapNode -Node $result.Node
+    Wait-ForMobileOrderCardSelection -Marker $Text -TimeoutSec 20 | Out-Null
+    Invoke-UiTapNode -Node $result.Node
+    Start-Sleep -Seconds 2
+}
+
+function Create-MobileOrder {
+    param(
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    Scroll-ToQueueTop
+    Tap-UiText -Text "New order" -TimeoutSec 10
+    Tap-UiText -Text "Order title" -TimeoutSec 10
+    Type-UiText -Text $Title
+    Tap-UiText -Text "Operator brief" -TimeoutSec 10
+    Type-UiText -Text $Description
+    Tap-UiText -Text "Create" -TimeoutSec 10
+    Wait-ForUiText -Text $Title -Contains -AllowScroll -TimeoutSec 30 | Out-Null
+    Focus-MobileSelectedOrderDetail
+}
+
+function Transition-MobileSelectedOrder {
+    param([Parameter(Mandatory = $true)][string]$StatusLabel)
+
+    Wait-ForUiText -Text "Selected order" -AllowScroll -TimeoutSec 20 | Out-Null
+    Tap-UiText -Text $StatusLabel -TimeoutSec 15
+    Wait-ForUiText -Text $StatusLabel -AllowScroll -TimeoutSec 20 | Out-Null
+}
+
+function Add-MobileComment {
+    param([Parameter(Mandatory = $true)][string]$CommentBody)
+
+    Wait-ForUiText -Text "Selected order" -AllowScroll -TimeoutSec 20 | Out-Null
+    Tap-UiText -Text "Add operator note" -TimeoutSec 10
+    Type-UiText -Text $CommentBody
+    Tap-UiText -Text "Post comment" -TimeoutSec 10
+    Wait-ForUiText -Text $CommentBody -Contains -AllowScroll -TimeoutSec 40 | Out-Null
+}
+
+function Invoke-WebCrossClientDriver {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet("create-and-mutate", "verify-order")][string]$Mode,
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)][string]$Comment,
+        [Parameter(Mandatory = $true)][string]$Description,
+        [Parameter(Mandatory = $true)][string]$ScreenshotPath,
+        [string]$Status = "in_review"
+    )
+
+    $originalPlaywrightBaseUrl = $env:PLAYWRIGHT_BASE_URL
+    $env:PLAYWRIGHT_BASE_URL = $WebBaseUrl
+
+    try {
+        Invoke-NativeCommand -FilePath "node" -ArgumentList @(
+            $webDriverPath,
+            "--mode", $Mode,
+            "--title", $Title,
+            "--comment", $Comment,
+            "--description", $Description,
+            "--status", $Status,
+            "--screenshot-path", $ScreenshotPath
+        ) -FailureMessage "Web cross-client driver failed."
+    } finally {
+        $env:PLAYWRIGHT_BASE_URL = $originalPlaywrightBaseUrl
+    }
+}
+
 function Invoke-ApiJson {
     param(
         [Parameter(Mandatory = $true)][string]$Method,
@@ -493,8 +679,31 @@ function Invoke-ApiJson {
     return Invoke-RestMethod @params
 }
 
+function Wait-ForApiOrderByTitle {
+    param(
+        [Parameter(Mandatory = $true)][string]$Token,
+        [Parameter(Mandatory = $true)][string]$Title,
+        [int]$TimeoutSec = 20
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    do {
+        $orders = Invoke-RestMethod -Method "GET" -Uri "$webApiBaseUrl/orders" -Headers @{ Authorization = "Bearer $Token" }
+        foreach ($order in $orders) {
+            if ([string]$order.title -eq $Title) {
+                return $order
+            }
+        }
+
+        Start-Sleep -Seconds 1
+    } while ((Get-Date) -lt $deadline)
+
+    throw "Unable to find the expected order in the live API: $Title"
+}
+
 Ensure-Device
 Build-And-InstallApk
+Assert-LiveStackReady
 
 Write-Host "Authenticating against live API..."
 $session = Invoke-ApiJson -Method "POST" -Path "/auth/login" -Body @{
@@ -513,63 +722,54 @@ if (-not $customer -or -not $operator) {
 Write-Host "Seeding mobile operator session..."
 Stop-MobileApp
 Write-MobileSession -Session $session
-Start-MobileApp
-Ensure-MobileSignedIn
+Reset-MobileQueueScreen
+
+$mobileStatusLabel = "In Review"
+$webStatusLabel = "In review"
 
 $unique = Get-Date -Format "yyyyMMddHHmmss"
-$orderTitle = "Cross-client sync $unique"
-$commentBody = "Cross-client note $unique"
+$webOrderTitle = "web mobile $unique"
+$webCommentBody = "web note $unique"
+$mobileOrderTitle = "mobile web $unique"
+$mobileCommentBody = "mobile note $unique"
 
-Write-Host "Creating and mutating order through the live API..."
-$created = Invoke-ApiJson -Method "POST" -Path "/orders" -Token $token -Body @{
-    title = $orderTitle
-    description = "Created by cross-client sync smoke."
-    customer_id = $customer.id
-}
-$orderCode = if ($created.PSObject.Properties.Match("code").Count -gt 0 -and $created.code) {
-    [string]$created.code
-} else {
-    $null
-}
-$orderUiMarker = if ($orderCode) { $orderCode } else { $orderTitle }
+Write-Host "Running web -> mobile smoke..."
+Invoke-WebCrossClientDriver `
+    -Mode "create-and-mutate" `
+    -Title $webOrderTitle `
+    -Comment $webCommentBody `
+    -Description "Created by the web console for cross-client verification." `
+    -ScreenshotPath $webCreateScreenshotPath
 
-Invoke-ApiJson -Method "POST" -Path "/orders/$($created.id)/status-transitions" -Token $token -Body @{
-    changed_by_id = $operator.id
-    to_status = "in_review"
-    reason = "Cross-client sync verification moved order to In review."
-} | Out-Null
+$webCreatedOrder = Wait-ForApiOrderByTitle -Token $token -Title $webOrderTitle
 
-Invoke-ApiJson -Method "POST" -Path "/orders/$($created.id)/comments" -Token $token -Body @{
-    author_id = $operator.id
-    body = $commentBody
-} | Out-Null
-
-$createdDetail = Invoke-ApiJson -Method "GET" -Path "/orders/$($created.id)" -Token $token
-if (-not $orderCode -and $createdDetail.PSObject.Properties.Match("code").Count -gt 0 -and $createdDetail.code) {
-    $orderCode = [string]$createdDetail.code
-}
-$orderUiMarker = if ($orderCode) { $orderCode } else { $orderTitle }
-Write-Host "Backend created order marker: $orderUiMarker"
-
-Write-Host "Reloading mobile app and verifying synced order..."
-Stop-MobileApp
-Start-MobileApp
-Ensure-MobileSignedIn
-if ($orderCode) {
-    Wait-ForUiText -Text $orderCode -TimeoutSec 20 | Out-Null
-}
-Scroll-Down
-Tap-SelectedOrderCard
-
-Wait-ForUiText -Text "Selected order" -TimeoutSec 20 | Out-Null
-Wait-ForUiText -Text "In Review" -TimeoutSec 20 | Out-Null
-Wait-ForUiText -Text "Post comment" -AllowScroll -TimeoutSec 20 | Out-Null
-Wait-ForUiText -Text $commentBody -Contains -AllowScroll -TimeoutSec 40 | Out-Null
-
+Reset-MobileQueueScreen
+Refresh-MobileQueue
+Scroll-ToQueueTop
+Filter-MobileQueue -Query $webOrderTitle
+Open-MobileOrderByText -Text $webOrderTitle -Contains
+Wait-ForUiText -Text "Comments" -AllowScroll -TimeoutSec 20 | Out-Null
+Wait-ForUiText -Text $mobileStatusLabel -AllowScroll -TimeoutSec 20 | Out-Null
+Wait-ForUiText -Text $webCommentBody -Contains -AllowScroll -TimeoutSec 60 | Out-Null
+Get-UiXml | Out-Null
 Save-Screenshot
 
-Write-Host "Cross-client sync check passed."
-Write-Host "Verified mobile received order: $orderUiMarker"
-Write-Host "Verified mobile comment: $commentBody"
-Write-Host "Screenshot: $screenshotPath"
-Write-Host "UI dump: $dumpPath"
+Write-Host "Running mobile -> web smoke..."
+Reset-MobileQueueScreen
+Create-MobileOrder -Title $mobileOrderTitle -Description "Created by the Android app for cross-client verification."
+Transition-MobileSelectedOrder -StatusLabel $mobileStatusLabel
+Add-MobileComment -CommentBody $mobileCommentBody
+
+Invoke-WebCrossClientDriver `
+    -Mode "verify-order" `
+    -Title $mobileOrderTitle `
+    -Comment $mobileCommentBody `
+    -Description "Created by the Android app for cross-client verification." `
+    -ScreenshotPath $webVerifyScreenshotPath
+
+Write-Host "Cross-client parity smoke passed."
+Write-Host "Verified mobile received web-created order: $webOrderTitle"
+Write-Host "Verified web received mobile-created order: $mobileOrderTitle"
+Write-Host "Mobile screenshot: $screenshotPath"
+Write-Host "Mobile UI dump: $dumpPath"
+Write-Host "Web screenshots: $webCreateScreenshotPath, $webVerifyScreenshotPath"

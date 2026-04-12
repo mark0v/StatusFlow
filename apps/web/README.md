@@ -50,3 +50,13 @@ npm.cmd run test:e2e --workspace apps/web
 ```
 
 The Playwright suite exercises the live operator console against the running API, including order creation, filter behavior, real status transitions, and live comment/history visibility in the inspector.
+
+## Cross-client parity smoke
+
+To verify `web -> mobile` and `mobile -> web` sync end to end, run the shared repo-level script:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/cross-client-sync.ps1 -StartEmulator
+```
+
+This uses a small Playwright driver against the live web console plus the Android adb flow to confirm both clients see each other's newly created orders, comments, and status transitions.
