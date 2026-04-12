@@ -24,7 +24,6 @@ test-results/
 outputs/
 
 .idea/
-.vscode/
 .agents/
 .gradle/
 .gradle-home/

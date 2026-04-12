@@ -1,0 +1,33 @@
+{
+    "java.jdt.ls.java.home": "${workspaceFolder}/.local/jdk/jdk-17.0.18+8",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-17",
+            "path": "${workspaceFolder}/.local/jdk/jdk-17.0.18+8",
+            "default": true
+        }
+    ],
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv-api/Scripts/python.exe",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/apps/api"
+    ],
+    "isort.args": [
+        "--settings-path",
+        "${workspaceFolder}/apps/api/pyproject.toml"
+    ],
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "files.exclude": {
+        "**/.gradle": true,
+        "**/build": true,
+        "**/node_modules": true,
+        "**/.venv-*": true
+    },
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/.gradle": true,
+        "**/build": true,
+        "**/.venv-*": true
+    }
+}
