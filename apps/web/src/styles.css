@@ -1207,6 +1207,74 @@ a {
     align-self: flex-end;
   }
 
+  /* Mobile card layout for orders table */
+  .orders-table thead {
+    display: none;
+  }
+
+  .orders-table,
+  .orders-table tbody,
+  .orders-table tr,
+  .orders-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .orders-table tbody tr {
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .orders-table tbody tr.is-selected {
+    border-color: rgba(90, 123, 255, 0.5);
+    background: rgba(90, 123, 255, 0.08);
+  }
+
+  .orders-table td {
+    padding: 4px 0;
+    border: none;
+    text-align: left;
+  }
+
+  .orders-table td.cell-code {
+    font-weight: 600;
+    color: #8db2ff;
+    font-size: 0.82rem;
+  }
+
+  .orders-table td.cell-title {
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: #e8edf2;
+    padding-bottom: 6px;
+  }
+
+  .orders-table td.cell-customer {
+    font-size: 0.82rem;
+    color: #8ea6c4;
+  }
+
+  .orders-table td.cell-updated {
+    font-size: 0.75rem;
+    color: #6b8299;
+  }
+
+  .orders-table td.cell-actions {
+    padding-top: 8px;
+    text-align: right;
+  }
+
+  .table-wrap {
+    overflow-x: visible;
+    border: none;
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
   .panel-header {
     align-items: start;
     flex-direction: column;
