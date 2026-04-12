@@ -30,6 +30,48 @@ gradlew.bat assembleDebug
 The current workspace uses a repository-local Android toolchain under `.local/`
 for JDK, Gradle, and Android SDK components.
 
+## Run the app manually
+
+From the repo root, first build the debug APK:
+
+```powershell
+cd apps/mobile
+.\gradlew.bat assembleDebug
+cd ../..
+```
+
+### Visible emulator mode
+
+Use this when you want to see the Android window and click through the app by hand:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-mobile-emulator-visible.ps1
+```
+
+This starts a normal visible emulator window, installs the debug APK, and launches `StatusFlow` inside it.
+
+Useful options:
+
+- `-RestartExisting` stops an already running headless emulator first, then reopens it visibly
+- `-SkipInstall` reuses the APK already installed on the device
+- `-SkipLaunch` boots the emulator but does not open the app
+
+### Headless emulator mode
+
+Use this for automation, smoke checks, and artifact capture:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-mobile-emulator.ps1
+powershell -ExecutionPolicy Bypass -File scripts/mobile-preview.ps1
+```
+
+Notes:
+
+- `scripts/start-mobile-emulator.ps1` intentionally uses `-no-window`, so the emulator runs without a visible UI
+- `scripts/mobile-preview.ps1` installs the APK, launches the app, and saves a screenshot
+- `scripts/mobile-smoke.ps1 -StartEmulator` is also headless and is the right entry point for automated validation
+- `scripts/cross-client-sync.ps1 -StartEmulator` also uses the headless path because it is meant for end-to-end automation rather than manual clicking
+
 ## Device smoke check
 
 From the repo root:

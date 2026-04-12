@@ -67,6 +67,41 @@ cd apps/mobile
 .\gradlew.bat connectedDebugAndroidTest
 ```
 
+## Mobile run modes
+
+### Visible mode for manual testing
+
+Use this when you want to open the emulator window and click through `StatusFlow` yourself:
+
+```powershell
+cd apps/mobile
+.\gradlew.bat assembleDebug
+cd ../..
+powershell -ExecutionPolicy Bypass -File scripts/start-mobile-emulator-visible.ps1
+```
+
+If a headless emulator is already running, use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-mobile-emulator-visible.ps1 -RestartExisting
+```
+
+### Headless mode for scripts and smoke automation
+
+Use this when you want reproducible automation and don't need a visible Android window:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-mobile-emulator.ps1
+powershell -ExecutionPolicy Bypass -File scripts/mobile-preview.ps1
+powershell -ExecutionPolicy Bypass -File scripts/mobile-smoke.ps1 -StartEmulator
+```
+
+Important:
+
+- `start-mobile-emulator.ps1` is headless by design and uses `-no-window`
+- `start-mobile-emulator-visible.ps1` is the manual-click entry point and opens a normal emulator window
+- `mobile-smoke.ps1` and `cross-client-sync.ps1` also use the headless emulator path when they boot an emulator themselves
+
 ## Cross-client parity smoke
 
 ```powershell
