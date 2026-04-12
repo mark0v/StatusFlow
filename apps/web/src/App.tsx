@@ -633,13 +633,6 @@ export default function App() {
     persistCurrentConsoleSnapshot(nextOrders, selectedOrderId, selectedOrderDetail);
   }
 
-  function handleClearSelection() {
-    setSelectedOrderId(null);
-    setSelectedOrderDetail(null);
-    setDetailError(null);
-    setCommentDraft("");
-  }
-
   function handleRecoverSelection() {
     if (!recoveryCandidateOrder) {
       handleClearSelection();
@@ -686,6 +679,37 @@ export default function App() {
     setOrders([]);
     setUsers([]);
     setLifecycle(null);
+    setSelectedOrderId(null);
+  }
+
+  async function handleRoleSignIn(role: "operator" | "customer") {
+    const credentials = role === "operator"
+      ? { email: "operator@example.com", password: "operator123" }
+      : { email: "customer@example.com", password: "customer123" };
+    setAuthForm({ email: credentials.email, password: credentials.password });
+
+    try {
+      setIsAuthenticating(true);
+      setAuthError(null);
+
+      const nextSession = await login(credentials);
+
+      persistSession(nextSession);
+      setSession(nextSession);
+    } catch (loginError) {
+      setAuthError(
+        loginError instanceof Error && isAuthFailureMessage(loginError.message)
+          ? "Invalid email or password."
+          : loginError instanceof Error
+            ? loginError.message
+            : "Sign-in failed."
+      );
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }
+
+  function handleClearSelection() {
     setSelectedOrderId(null);
     setSelectedOrderDetail(null);
     setDetailError(null);
@@ -933,6 +957,7 @@ export default function App() {
           onEmailChange={(email) => setAuthForm((current) => ({ ...current, email }))}
           onPasswordChange={(password) => setAuthForm((current) => ({ ...current, password }))}
           onSubmit={handleLogin}
+          onRoleSignIn={handleRoleSignIn}
         />
       </ErrorBoundary>
     );

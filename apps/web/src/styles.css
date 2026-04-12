@@ -422,6 +422,114 @@ a {
   gap: 14px;
 }
 
+/* Auth screen — role-first sign in */
+.auth-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.auth-header h1 {
+  font-size: 1.2rem;
+  color: #e8edf2;
+  margin: 0;
+}
+
+.role-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.role-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(10, 19, 36, 0.8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+}
+
+.role-card:hover:not(:disabled) {
+  border-color: rgba(90, 123, 255, 0.5);
+  background: rgba(20, 35, 60, 0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.role-card:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.role-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.role-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.role-card-operator .role-card-icon {
+  background: rgba(90, 123, 255, 0.2);
+  color: #8db2ff;
+}
+
+.role-card-customer .role-card-icon {
+  background: rgba(31, 202, 165, 0.2);
+  color: #1fcaa5;
+}
+
+.role-card-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.role-card-body h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #e8edf2;
+  margin: 0 0 4px;
+}
+
+.role-card-body p {
+  font-size: 0.82rem;
+  color: #8ea6c4;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.auth-toggle-manual {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: transparent;
+  color: #8ea6c4;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  font: inherit;
+}
+
+.auth-toggle-manual:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #b8c5d6;
+}
+
 .auth-hint {
   display: grid;
   gap: 4px;
@@ -430,6 +538,12 @@ a {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #b8c5d6;
+}
+
+@media (max-width: 600px) {
+  .role-cards {
+    grid-template-columns: 1fr;
+  }
 }
 
 .status-card {
