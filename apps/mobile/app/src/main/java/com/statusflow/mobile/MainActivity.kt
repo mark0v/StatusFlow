@@ -32,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -88,10 +89,31 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         MobileSessionStore.initialize(applicationContext)
+
+        // Debug/test hook: allow opening a specific order by ID via intent extra
+        // Usage: adb shell am start -n com.statusflow.mobile/.MainActivity --es debug_order_id "order-123"
+        val debugOrderId = intent.getStringExtra("debug_order_id")
+
         setContent {
             StatusFlowTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MobileHomeRoute()
+                    MobileHomeRoute(initialSelectedOrderId = debugOrderId)
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        // Handle intent updates while activity is already running
+        val debugOrderId = intent.getStringExtra("debug_order_id")
+        if (debugOrderId != null) {
+            // The activity will recompose with the new value
+            setContent {
+                StatusFlowTheme {
+                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        MobileHomeRoute(initialSelectedOrderId = debugOrderId)
+                    }
                 }
             }
         }
@@ -452,13 +474,21 @@ class MobileHomeViewModel(
 }
 
 @Composable
-fun MobileHomeRoute() {
+fun MobileHomeRoute(initialSelectedOrderId: String? = null) {
     val viewModel: MobileHomeViewModel = viewModel(factory = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             MobileHomeViewModel(StatusFlowApiRepository.from(MobileSessionStore.appContext())) as T
     })
     val state by viewModel.uiState.collectAsState()
+
+    // Auto-select order if provided via debug intent
+    LaunchedEffect(initialSelectedOrderId) {
+        if (initialSelectedOrderId != null) {
+            viewModel.selectOrder(initialSelectedOrderId)
+        }
+    }
+
     MobileHomeScreen(
         state = state,
         onSignIn = viewModel::signIn,
@@ -494,6 +524,13 @@ fun MobileHomeScreen(
     var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var sortOptionName by rememberSaveable { mutableStateOf(MobileOrderSortOption.UPDATED_DESC.name) }
     val sortOption = MobileOrderSortOption.valueOf(sortOptionName)
+
+    // Auto-show detail when order is pre-selected via debug intent
+    LaunchedEffect(state.selectedOrderDetail) {
+        if (state.selectedOrderDetail != null && !isShowingDetail) {
+            isShowingDetail = true
+        }
+    }
 
     val availableStatuses = state.orders.map { it.rawStatus }.distinct()
     val normalizedQuery = searchQuery.trim().lowercase()
