@@ -90,37 +90,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         MobileSessionStore.initialize(applicationContext)
 
-        // Debug/test hook: allow opening a specific order by ID via intent extra
-        // Usage: adb shell am start -n com.statusflow.mobile/.MainActivity --es debug_order_id "order-123"
-        // This is only enabled in debug builds for testing purposes
-        val debugOrderId = if (BuildConfig.DEBUG_INTENT_HOOK_ENABLED) {
-            intent.getStringExtra("debug_order_id")
-        } else {
-            null
-        }
-
         setContent {
             StatusFlowTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    MobileHomeRoute(initialSelectedOrderId = debugOrderId)
-                }
-            }
-        }
-    }
-
-    override fun onNewIntent(intent: android.content.Intent) {
-        super.onNewIntent(intent)
-        // Handle intent updates while activity is already running
-        if (BuildConfig.DEBUG_INTENT_HOOK_ENABLED) {
-            val debugOrderId = intent.getStringExtra("debug_order_id")
-            if (debugOrderId != null) {
-                // The activity will recompose with the new value
-                setContent {
-                    StatusFlowTheme {
-                        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                            MobileHomeRoute(initialSelectedOrderId = debugOrderId)
-                        }
-                    }
+                    MobileHomeRoute()
                 }
             }
         }
@@ -481,20 +454,13 @@ class MobileHomeViewModel(
 }
 
 @Composable
-fun MobileHomeRoute(initialSelectedOrderId: String? = null) {
+fun MobileHomeRoute() {
     val viewModel: MobileHomeViewModel = viewModel(factory = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             MobileHomeViewModel(StatusFlowApiRepository.from(MobileSessionStore.appContext())) as T
     })
     val state by viewModel.uiState.collectAsState()
-
-    // Auto-select order if provided via debug intent
-    LaunchedEffect(initialSelectedOrderId) {
-        if (initialSelectedOrderId != null) {
-            viewModel.selectOrder(initialSelectedOrderId)
-        }
-    }
 
     MobileHomeScreen(
         state = state,
@@ -520,8 +486,8 @@ fun MobileHomeScreen(
     onTransitionOrder: (String) -> Unit,
     onAddComment: (String) -> Unit
 ) {
-    var email by rememberSaveable { mutableStateOf("operator@example.com") }
-    var password by rememberSaveable { mutableStateOf("operator123") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var commentBody by remember { mutableStateOf("") }
@@ -540,23 +506,26 @@ fun MobileHomeScreen(
     }
 
     val availableStatuses = state.orders.map { it.rawStatus }.distinct()
-    val normalizedQuery = searchQuery.trim().lowercase()
-    val visibleOrders = state.orders
-        .filter { statusFilter == null || it.rawStatus == statusFilter }
-        .filter { order ->
-            normalizedQuery.isBlank() ||
-                order.code.lowercase().contains(normalizedQuery) ||
-                order.title.lowercase().contains(normalizedQuery) ||
-                order.customerName.lowercase().contains(normalizedQuery)
-        }
-        .let { orders ->
-            when (sortOption) {
-                MobileOrderSortOption.UPDATED_DESC -> orders
-                MobileOrderSortOption.UPDATED_ASC -> orders.reversed()
-                MobileOrderSortOption.TITLE_ASC -> orders.sortedBy { it.title.lowercase() }
-                MobileOrderSortOption.STATUS_ASC -> orders.sortedWith(compareBy<MobileOrderSummary> { statusLabel(it.rawStatus) }.thenBy { it.title.lowercase() })
+
+    val visibleOrders = remember(state.orders, searchQuery, statusFilter, sortOption) {
+        val normalizedQuery = searchQuery.trim().lowercase()
+        state.orders
+            .filter { statusFilter == null || it.rawStatus == statusFilter }
+            .filter { order ->
+                normalizedQuery.isBlank() ||
+                    order.code.lowercase().contains(normalizedQuery) ||
+                    order.title.lowercase().contains(normalizedQuery) ||
+                    order.customerName.lowercase().contains(normalizedQuery)
             }
-        }
+            .let { orders ->
+                when (sortOption) {
+                    MobileOrderSortOption.UPDATED_DESC -> orders
+                    MobileOrderSortOption.UPDATED_ASC -> orders.reversed()
+                    MobileOrderSortOption.TITLE_ASC -> orders.sortedBy { it.title.lowercase() }
+                    MobileOrderSortOption.STATUS_ASC -> orders.sortedWith(compareBy<MobileOrderSummary> { statusLabel(it.rawStatus) }.thenBy { it.title.lowercase() })
+                }
+            }
+    }
 
     Scaffold { padding ->
         Box(
