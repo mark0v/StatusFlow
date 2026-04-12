@@ -449,7 +449,8 @@ describe("App", () => {
     credentials = {
       email: "operator@example.com",
       password: "operator123"
-    }
+    },
+    expectedHeading = "Operate the live workflow"
   ) {
     render(<App />);
 
@@ -458,7 +459,7 @@ describe("App", () => {
     await user.clear(screen.getByLabelText("Password"));
     await user.type(screen.getByLabelText("Password"), credentials.password);
     await user.click(screen.getByRole("button", { name: "Sign in" }));
-    await screen.findByRole("heading", { name: "Operate the live workflow" });
+    await screen.findByRole("heading", { name: expectedHeading });
 
     return user;
   }
@@ -681,7 +682,7 @@ describe("App", () => {
     const user = await signIn(userEvent.setup(), {
       email: "customer@example.com",
       password: "customer123"
-    });
+    }, "Track the live workflow");
 
     expect(screen.queryByRole("heading", { name: "Operator access required" })).not.toBeInTheDocument();
 

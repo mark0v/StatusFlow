@@ -474,6 +474,10 @@ export default function App() {
     [users]
   );
   const isOperator = session?.user.role === "operator";
+  const consoleTitle = isOperator ? "Operate the live workflow" : "Track the live workflow";
+  const queueSectionTitle = isOperator
+    ? "Review and move orders forward"
+    : "Track your orders across the live workflow";
   const currentCustomer = useMemo(() => resolveCurrentCustomer(users, session), [session, users]);
   const recoveryCandidateOrder = useMemo(
     () => resolveRecoveryCandidateOrder(orders, selectedOrderId),
@@ -950,13 +954,14 @@ export default function App() {
         <section className="panel panel-console">
           <div className="panel-header">
             <div>
-              <h2>Operate the live workflow</h2>
+              <h2>{consoleTitle}</h2>
             </div>
           </div>
 
           <StatusSummary groupedStatuses={groupedStatuses} />
 
           <OrderTable
+            sectionTitle={queueSectionTitle}
             orders={orders}
             paginatedOrders={paginatedOrders}
             sortedOrders={sortedOrders}

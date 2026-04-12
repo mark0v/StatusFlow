@@ -13,6 +13,7 @@ import {
 } from "../data/webTypes";
 
 interface Props {
+  sectionTitle: string;
   orders: OrderCard[];
   paginatedOrders: OrderCard[];
   sortedOrders: OrderCard[];
@@ -65,6 +66,7 @@ function sortIndicator(field: SortField, sortField: SortField, sortDirection: So
 }
 
 export function OrderTable({
+  sectionTitle,
   orders,
   paginatedOrders,
   sortedOrders,
@@ -112,7 +114,7 @@ export function OrderTable({
     <section className="table-stage">
       <div className="table-toolbar">
         <div>
-          <h3>Review and move orders forward</h3>
+          <h3>{sectionTitle}</h3>
         </div>
       </div>
 

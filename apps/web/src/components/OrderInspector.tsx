@@ -43,6 +43,8 @@ export function OrderInspector({
   onCommentDraftChange,
   onAddComment
 }: Props) {
+  const visibleComments = isOperator ? selectedOrderDetail?.comments ?? [] : [];
+
   return (
     <section className="detail-inspector">
       <div className="section-heading">
@@ -154,7 +156,7 @@ export function OrderInspector({
                 <p className="eyebrow">Comments</p>
                 <h4>{isOperator ? "Operator notes" : "Queue notes"}</h4>
               </div>
-              <span className="inspector-count">{selectedOrderDetail.comments.length}</span>
+              <span className="inspector-count">{visibleComments.length}</span>
             </div>
 
             {isOperator && !selectedOrderIsQueuedDraft ? (
@@ -186,11 +188,11 @@ export function OrderInspector({
               </div>
             )}
 
-            {selectedOrderDetail.comments.length === 0 ? (
+            {visibleComments.length === 0 ? (
               <div className="mini-empty">No comments yet for this order.</div>
             ) : (
               <div className="timeline-list">
-                {[...selectedOrderDetail.comments].reverse().map((comment) => (
+                {[...visibleComments].reverse().map((comment) => (
                   <article className="timeline-item" key={comment.id}>
                     <strong>{comment.author.name}</strong>
                     <span>{formatTimestamp(comment.created_at)}</span>
