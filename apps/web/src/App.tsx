@@ -6,7 +6,9 @@ import {
   addOrderComment,
   createOrder,
   isAuthFailureMessage,
+  isOfflineQueueableError,
   login,
+  NETWORK_UNAVAILABLE_ERROR,
   transitionOrderStatus
 } from "./data/webApi";
 import {
@@ -27,6 +29,19 @@ import {
   syncDashboardAndDetail,
   syncOrderDetail
 } from "./data/webSyncStore";
+import {
+  buildQueuedCommentPreview,
+  buildQueuedCreateOrderPreview,
+  buildQueuedStatusHistoryEvent,
+  clearQueuedMutations,
+  enqueueQueuedMutation,
+  readQueuedMutations,
+  replaceQueuedMutations,
+  type QueuedCommentMutation,
+  type QueuedCreateOrderMutation,
+  type QueuedMutation,
+  type QueuedStatusTransitionMutation
+} from "./data/webMutationQueueStore";
 import {
   formatTimestamp,
   historySummary,
@@ -82,6 +97,9 @@ export default function App() {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [syncSource, setSyncSource] = useState<SyncSource>("live");
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const [pendingMutations, setPendingMutations] = useState<QueuedMutation[]>([]);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
+  const [queueError, setQueueError] = useState<string | null>(null);
 
   function applyDashboardState(data: {
     orders: OrderCard[];
@@ -134,6 +152,104 @@ export default function App() {
     return true;
   }
 
+  function updateQueuedMutations(nextMutations: QueuedMutation[]) {
+    if (session) {
+      replaceQueuedMutations(session.user.id, nextMutations);
+    }
+
+    setPendingMutations(nextMutations);
+  }
+
+  function enqueueMutation(mutation: QueuedMutation) {
+    enqueueQueuedMutation(mutation);
+    setPendingMutations((current) => [...current, mutation]);
+  }
+
+  function queueMutationNotice(count: number) {
+    return `${count} queued change${count === 1 ? "" : "s"} waiting for the next successful sync.`;
+  }
+
+  function getSyncErrorMessage(errorMessage: string) {
+    if (errorMessage === NETWORK_UNAVAILABLE_ERROR) {
+      return "Connection is unavailable. Queued changes will retry on the next refresh.";
+    }
+
+    return errorMessage;
+  }
+
+  async function flushPendingMutations(accessToken: string) {
+    if (!session) {
+      return;
+    }
+
+    const queuedMutations = readQueuedMutations(session.user.id);
+    if (queuedMutations.length === 0) {
+      setPendingMutations([]);
+      return;
+    }
+
+    let remainingQueue = [...queuedMutations];
+    let flushedCount = 0;
+    const droppedErrors: string[] = [];
+
+    while (remainingQueue.length > 0) {
+      const [currentMutation, ...rest] = remainingQueue;
+
+      try {
+        if (currentMutation.type === "create_order") {
+          await createOrder(accessToken, {
+            title: currentMutation.payload.title,
+            description: currentMutation.payload.description,
+            customer_id: currentMutation.payload.customerId
+          });
+        } else if (currentMutation.type === "add_comment") {
+          await addOrderComment(accessToken, currentMutation.payload.orderId, {
+            author_id: currentMutation.payload.author.id,
+            body: currentMutation.payload.body
+          });
+        } else {
+          await transitionOrderStatus(accessToken, currentMutation.payload.orderId, {
+            changed_by_id: currentMutation.payload.changedBy.id,
+            to_status: currentMutation.payload.toStatus,
+            reason: currentMutation.payload.reason
+          });
+        }
+      } catch (flushError) {
+        if (flushError instanceof Error && isAuthFailureMessage(flushError.message)) {
+          throw flushError;
+        }
+
+        if (flushError instanceof Error && isOfflineQueueableError(flushError.message)) {
+          updateQueuedMutations(remainingQueue);
+          setQueueError(getSyncErrorMessage(flushError.message));
+          if (flushedCount > 0) {
+            setQueueNotice(`Synced ${flushedCount} queued change${flushedCount === 1 ? "" : "s"} before the connection dropped.`);
+          }
+          return;
+        }
+
+        droppedErrors.push(
+          flushError instanceof Error
+            ? flushError.message
+            : "A queued change could not be applied."
+        );
+        remainingQueue = rest;
+        continue;
+      }
+
+      flushedCount += 1;
+      remainingQueue = rest;
+    }
+
+    updateQueuedMutations(remainingQueue);
+
+    if (flushedCount > 0) {
+      setQueueNotice(`Synced ${flushedCount} queued change${flushedCount === 1 ? "" : "s"}.`);
+    }
+
+    setQueueError(droppedErrors[0] ? `Dropped queued change: ${droppedErrors[0]}` : null);
+  }
+
   async function refreshDashboardAndDetail(
     accessToken: string,
     preferredSelectedOrderId?: string | null,
@@ -141,6 +257,7 @@ export default function App() {
   ) {
     setIsDetailLoading(true);
     try {
+      await flushPendingMutations(accessToken);
       const nextState = await syncDashboardAndDetail(accessToken, preferredSelectedOrderId, signal);
       applyDashboardState(nextState.dashboard);
       setLastRefreshedAt(nextState.lastRefreshedAt);
@@ -161,6 +278,9 @@ export default function App() {
 
   function handleAuthExpired(message = "Your session expired. Sign in again.") {
     clearCachedConsoleSnapshot();
+    if (session) {
+      clearQueuedMutations(session.user.id);
+    }
     persistSession(null);
     setSession(null);
     setOrders([]);
@@ -176,8 +296,22 @@ export default function App() {
     setLastRefreshedAt(null);
     setSyncSource("live");
     setSyncNotice(null);
+    setPendingMutations([]);
+    setQueueNotice(null);
+    setQueueError(null);
     setAuthError(message);
   }
+
+  useEffect(() => {
+    if (!session) {
+      setPendingMutations([]);
+      setQueueNotice(null);
+      setQueueError(null);
+      return;
+    }
+
+    setPendingMutations(readQueuedMutations(session.user.id));
+  }, [session]);
 
   useEffect(() => {
     if (!session) {
@@ -343,6 +477,8 @@ export default function App() {
     () => sortOrders(filteredOrders, sortField, sortDirection),
     [filteredOrders, sortDirection, sortField]
   );
+  const pendingMutationCount = pendingMutations.length;
+  const selectedOrderIsQueuedDraft = selectedOrderId?.startsWith("queued-order-") ?? false;
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -401,6 +537,97 @@ export default function App() {
     }
   }
 
+  function persistCurrentConsoleSnapshot(
+    nextOrders: OrderCard[],
+    nextSelectedOrderId: string | null,
+    nextSelectedOrderDetail: OrderDetail | null
+  ) {
+    if (!lifecycle) {
+      return;
+    }
+
+    persistCachedConsoleSnapshot({
+      dashboard: {
+        orders: nextOrders,
+        users,
+        lifecycle
+      },
+      lastRefreshedAt: lastRefreshedAt ?? new Date().toISOString(),
+      selectedOrderId: nextSelectedOrderId,
+      selectedOrderDetail: nextSelectedOrderDetail
+    });
+  }
+
+  function applyQueuedCreatePreview(mutation: QueuedCreateOrderMutation) {
+    const preview = buildQueuedCreateOrderPreview(mutation);
+    const nextOrders = [preview.order, ...orders];
+
+    setOrders(nextOrders);
+    setSelectedOrderId(preview.order.id);
+    applyDetailState(preview.detail, null);
+    persistCurrentConsoleSnapshot(nextOrders, preview.order.id, preview.detail);
+  }
+
+  function applyQueuedCommentPreview(mutation: QueuedCommentMutation) {
+    const previewComment = buildQueuedCommentPreview(mutation);
+    const nextUpdatedAt = mutation.createdAt;
+    const nextOrders = orders.map((order) =>
+      order.id === mutation.payload.orderId
+        ? {
+            ...order,
+            updated_at: nextUpdatedAt
+          }
+        : order
+    );
+
+    setOrders(nextOrders);
+
+    if (selectedOrderDetail?.id === mutation.payload.orderId) {
+      const nextDetail: OrderDetail = {
+        ...selectedOrderDetail,
+        updated_at: nextUpdatedAt,
+        comments: [...selectedOrderDetail.comments, previewComment]
+      };
+      applyDetailState(nextDetail, null);
+      persistCurrentConsoleSnapshot(nextOrders, mutation.payload.orderId, nextDetail);
+      return;
+    }
+
+    persistCurrentConsoleSnapshot(nextOrders, selectedOrderId, selectedOrderDetail);
+  }
+
+  function applyQueuedStatusPreview(mutation: QueuedStatusTransitionMutation) {
+    const nextUpdatedAt = mutation.createdAt;
+    const nextOrders = orders.map((order) =>
+      order.id === mutation.payload.orderId
+        ? {
+            ...order,
+            status: mutation.payload.toStatus,
+            updated_at: nextUpdatedAt
+          }
+        : order
+    );
+
+    setOrders(nextOrders);
+
+    if (selectedOrderDetail?.id === mutation.payload.orderId) {
+      const nextDetail: OrderDetail = {
+        ...selectedOrderDetail,
+        status: mutation.payload.toStatus,
+        updated_at: nextUpdatedAt,
+        history: [
+          ...selectedOrderDetail.history,
+          buildQueuedStatusHistoryEvent(mutation, selectedOrderDetail.status)
+        ]
+      };
+      applyDetailState(nextDetail, null);
+      persistCurrentConsoleSnapshot(nextOrders, mutation.payload.orderId, nextDetail);
+      return;
+    }
+
+    persistCurrentConsoleSnapshot(nextOrders, selectedOrderId, selectedOrderDetail);
+  }
+
   function handleClearSelection() {
     setSelectedOrderId(null);
     setSelectedOrderDetail(null);
@@ -446,6 +673,9 @@ export default function App() {
 
   function handleLogout() {
     clearCachedConsoleSnapshot();
+    if (session) {
+      clearQueuedMutations(session.user.id);
+    }
     persistSession(null);
     setSession(null);
     setOrders([]);
@@ -464,6 +694,9 @@ export default function App() {
     setLastRefreshedAt(null);
     setSyncSource("live");
     setSyncNotice(null);
+    setPendingMutations([]);
+    setQueueNotice(null);
+    setQueueError(null);
   }
 
   async function handleCreateOrder(event: FormEvent<HTMLFormElement>) {
@@ -493,6 +726,31 @@ export default function App() {
       setIsCreateOpen(false);
       await refreshDashboardAndDetail(session.access_token);
     } catch (submitError) {
+      if (submitError instanceof Error && isOfflineQueueableError(submitError.message)) {
+        const queuedMutation: QueuedCreateOrderMutation = {
+          id: `queued-create-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          userId: session.user.id,
+          type: "create_order",
+          tempOrderId: `queued-order-${Date.now()}`,
+          payload: {
+            title: formState.title,
+            description: formState.description,
+            customerId: currentCustomer.id,
+            customerName: currentCustomer.name,
+            createdBy: session.user
+          }
+        };
+
+        enqueueMutation(queuedMutation);
+        applyQueuedCreatePreview(queuedMutation);
+        setFormState({ title: "", description: "" });
+        setIsCreateOpen(false);
+        setQueueNotice(queueMutationNotice(pendingMutations.length + 1));
+        setQueueError(getSyncErrorMessage(submitError.message));
+        return;
+      }
+
       if (submitError instanceof Error && isAuthFailureMessage(submitError.message)) {
         handleAuthExpired(
           submitError.message === FORBIDDEN_ERROR
@@ -541,6 +799,28 @@ export default function App() {
       setOpenActionsOrderId(null);
       await refreshDashboardAndDetail(session.access_token, orderId);
     } catch (submitError) {
+      if (submitError instanceof Error && isOfflineQueueableError(submitError.message)) {
+        const queuedMutation: QueuedStatusTransitionMutation = {
+          id: `queued-status-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          userId: session.user.id,
+          type: "transition_status",
+          payload: {
+            orderId,
+            toStatus,
+            reason: `Operator moved order to ${statusLabels[toStatus]}.`,
+            changedBy: session.user
+          }
+        };
+
+        enqueueMutation(queuedMutation);
+        applyQueuedStatusPreview(queuedMutation);
+        setOpenActionsOrderId(null);
+        setQueueNotice(queueMutationNotice(pendingMutations.length + 1));
+        setQueueError(getSyncErrorMessage(submitError.message));
+        return;
+      }
+
       if (submitError instanceof Error && isAuthFailureMessage(submitError.message)) {
         handleAuthExpired(
           submitError.message === FORBIDDEN_ERROR
@@ -595,6 +875,27 @@ export default function App() {
       setCommentDraft("");
       await refreshDashboardAndDetail(session.access_token, selectedOrderId);
     } catch (submitError) {
+      if (submitError instanceof Error && isOfflineQueueableError(submitError.message)) {
+        const queuedMutation: QueuedCommentMutation = {
+          id: `queued-comment-${Date.now()}`,
+          createdAt: new Date().toISOString(),
+          userId: session.user.id,
+          type: "add_comment",
+          payload: {
+            orderId: selectedOrderId,
+            body: commentDraft.trim(),
+            author: session.user
+          }
+        };
+
+        enqueueMutation(queuedMutation);
+        applyQueuedCommentPreview(queuedMutation);
+        setCommentDraft("");
+        setQueueNotice(queueMutationNotice(pendingMutations.length + 1));
+        setQueueError(getSyncErrorMessage(submitError.message));
+        return;
+      }
+
       if (submitError instanceof Error && isAuthFailureMessage(submitError.message)) {
         handleAuthExpired(
           submitError.message === FORBIDDEN_ERROR
@@ -762,6 +1063,7 @@ export default function App() {
               </p>
               <span className="queue-snapshot-meta">
                 Showing {sortedOrders.length} of {orders.length} orders
+                {pendingMutationCount > 0 ? ` · Pending sync ${pendingMutationCount}` : ""}
               </span>
             </article>
           </div>
@@ -866,6 +1168,18 @@ export default function App() {
               <span className="feedback-eyebrow">Cached snapshot</span>
               <strong>Showing the last successful queue state.</strong>
               <p>{syncNotice}</p>
+            </div>
+          ) : null}
+
+          {pendingMutationCount > 0 || queueNotice || queueError ? (
+            <div className={`feedback-card compact ${queueError ? "feedback-error" : "feedback-sync"}`}>
+              <span className="feedback-eyebrow">Offline queue</span>
+              <strong>
+                {pendingMutationCount > 0
+                  ? `${pendingMutationCount} queued change${pendingMutationCount === 1 ? "" : "s"} waiting to sync.`
+                  : "Queued changes synced."}
+              </strong>
+              <p>{queueError ?? queueNotice ?? "Queued changes will replay on the next successful refresh."}</p>
             </div>
           ) : null}
 
@@ -977,6 +1291,8 @@ export default function App() {
                             <div className="table-actions">
                               {nextStatuses.length === 0 ? (
                                 <span className="transition-terminal">Terminal state</span>
+                              ) : order.id.startsWith("queued-order-") ? (
+                                <span className="transition-terminal">Queued offline</span>
                               ) : !isOperator ? (
                                 <span className="transition-terminal">Operator only</span>
                               ) : (
@@ -1133,7 +1449,7 @@ export default function App() {
                     <span className="inspector-count">{selectedOrderDetail.comments.length}</span>
                   </div>
 
-                  {isOperator ? (
+                  {isOperator && !selectedOrderIsQueuedDraft ? (
                     <form className="comment-form" onSubmit={handleAddComment}>
                       <label className="field field-wide">
                         <span>Add comment</span>
@@ -1152,6 +1468,10 @@ export default function App() {
                         {isSubmitting ? "Posting..." : "Post comment"}
                       </button>
                     </form>
+                  ) : isOperator ? (
+                    <div className="mini-empty">
+                      Sync queued draft orders before adding comments.
+                    </div>
                   ) : (
                     <div className="mini-empty">
                       Comments are available in operator mode.

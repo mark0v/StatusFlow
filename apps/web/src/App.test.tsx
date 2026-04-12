@@ -128,6 +128,11 @@ function installFetchMock(
   options?: {
     failingDetailIds?: string[];
     failingOrdersGetCount?: number;
+    networkFailureRules?: Array<{
+      method?: string;
+      pathPattern: RegExp;
+      times?: number;
+    }>;
     transientFailingDetailIds?: string[];
   }
 ) {
@@ -135,6 +140,12 @@ function installFetchMock(
   let orderCounter = 1000 + orders.length;
   const failingDetailIds = new Set(options?.failingDetailIds ?? []);
   let failingOrdersGetCount = options?.failingOrdersGetCount ?? 0;
+  const networkFailureRules =
+    options?.networkFailureRules?.map((rule) => ({
+      ...rule,
+      method: rule.method ?? "GET",
+      remaining: rule.times ?? 1
+    })) ?? [];
   const transientFailingDetailIds = new Map(
     (options?.transientFailingDetailIds ?? []).map((orderId) => [orderId, 1])
   );
@@ -202,6 +213,14 @@ function installFetchMock(
     const isAuthed = Array.from(sessionsByEmail.values()).some(
       (session) => headers.get("Authorization") === `Bearer ${session.access_token}`
     );
+    const matchingFailureRule = networkFailureRules.find(
+      (rule) => rule.method === method && rule.pathPattern.test(path) && rule.remaining > 0
+    );
+
+    if (matchingFailureRule) {
+      matchingFailureRule.remaining -= 1;
+      throw new Error("Failed to fetch");
+    }
 
     if (path === "/auth/login" && method === "POST") {
       const body = JSON.parse(String(init?.body ?? "{}")) as {
@@ -581,6 +600,82 @@ describe("App", () => {
     expect(screen.getByText("Cached view")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Verify warranty documents" })).toBeInTheDocument();
     expect(screen.getByText("Order detail for Verify warranty documents.")).toBeInTheDocument();
+  });
+
+  it("queues create-order mutations offline and replays them on the next refresh", async () => {
+    const user = await signIn();
+
+    fetchMock = installFetchMock(baseOrders(), {
+      networkFailureRules: [{ method: "POST", pathPattern: /^\/orders$/, times: 1 }]
+    });
+
+    await user.click(screen.getByRole("button", { name: "Create order" }));
+    await user.type(screen.getByLabelText("Order title"), "Queued offline replacement");
+    await user.type(screen.getByLabelText("Description"), "Captured while the API was unavailable.");
+    await user.click(screen.getByRole("button", { name: /^Create order$/ }));
+
+    await screen.findByText("1 queued change waiting to sync.");
+    expect(screen.getAllByText("Queued offline replacement")).toHaveLength(2);
+    expect(screen.getByText(/Connection is unavailable/)).toBeInTheDocument();
+
+    fetchMock = installFetchMock(baseOrders());
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await screen.findByText("Queued changes synced.");
+    expect(screen.queryByText("1 queued change waiting to sync.")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Queued offline replacement")).toHaveLength(2);
+  });
+
+  it("queues comment mutations offline and replays them on refresh", async () => {
+    const user = await signIn();
+
+    await selectOrder(user, "Replace display unit");
+    await screen.findByText("Initial operator note.");
+
+    fetchMock = installFetchMock(baseOrders(), {
+      networkFailureRules: [{ method: "POST", pathPattern: /^\/orders\/order-1\/comments$/, times: 1 }]
+    });
+
+    await user.type(screen.getByLabelText("Add comment"), "Queued comment from offline mode");
+    await user.click(screen.getByRole("button", { name: "Post comment" }));
+
+    await screen.findByText("Queued comment from offline mode");
+    expect(screen.getByText("1 queued change waiting to sync.")).toBeInTheDocument();
+
+    fetchMock = installFetchMock(baseOrders());
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await screen.findByText("Queued changes synced.");
+    expect(screen.getByText("Queued comment from offline mode")).toBeInTheDocument();
+  });
+
+  it("queues status transitions offline and replays them on refresh", async () => {
+    const user = await signIn();
+
+    const rowTitle = await screen.findByRole("cell", { name: "Replace display unit" });
+    const row = rowTitle.closest("tr");
+
+    if (!row) {
+      throw new Error("Unable to find table row for Replace display unit");
+    }
+
+    fetchMock = installFetchMock(baseOrders(), {
+      networkFailureRules: [{ method: "POST", pathPattern: /^\/orders\/order-1\/status-transitions$/, times: 1 }]
+    });
+
+    await user.click(within(row).getByRole("button", { name: "Change status" }));
+    await user.click(screen.getByRole("button", { name: "In review" }));
+
+    await waitFor(() => {
+      expect(within(row).getByText("In review")).toBeInTheDocument();
+    });
+    expect(screen.getByText("1 queued change waiting to sync.")).toBeInTheDocument();
+
+    fetchMock = installFetchMock(baseOrders());
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await screen.findByText("Queued changes synced.");
+    expect(within(row).getByText("In review")).toBeInTheDocument();
   });
 
   it("lets a customer sign in, create orders, and browse the queue in read-only mode", async () => {

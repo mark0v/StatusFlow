@@ -9,9 +9,14 @@ import type {
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 export const AUTH_REQUIRED_ERROR = "AUTH_REQUIRED";
 export const FORBIDDEN_ERROR = "FORBIDDEN";
+export const NETWORK_UNAVAILABLE_ERROR = "NETWORK_UNAVAILABLE";
 
 export function isAuthFailureMessage(message: string) {
   return message === AUTH_REQUIRED_ERROR || message === FORBIDDEN_ERROR;
+}
+
+export function isOfflineQueueableError(message: string) {
+  return message === NETWORK_UNAVAILABLE_ERROR;
 }
 
 async function readJson<T>(path: string, token?: string, init?: RequestInit) {
@@ -21,10 +26,15 @@ async function readJson<T>(path: string, token?: string, init?: RequestInit) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers
+    });
+  } catch {
+    throw new Error(NETWORK_UNAVAILABLE_ERROR);
+  }
 
   if (!response.ok) {
     const message =
