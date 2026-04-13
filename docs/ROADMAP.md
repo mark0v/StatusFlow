@@ -34,10 +34,10 @@ Done:
 - automated API tests
 
 Missing for v1:
-- authentication and authorization
 - clearer separation of operator vs end-user capabilities
 - stronger duplicate-submission and idempotency coverage
 - richer error taxonomy and observability hooks
+- auth hardening beyond the current seeded local bearer flow
 
 ### Web
 
@@ -54,6 +54,9 @@ Done:
 - cached dashboard/detail fallback
 - detail recovery state
 - offline mutation queue for create/comment/status
+- role-first sign-in and split operator/customer shells
+- queue-first hierarchy and mobile-width card layout
+- locked/empty-state cleanup and typography polish
 - favicon, manifest, browser metadata
 - mocked UI tests
 - live Playwright end-to-end tests
@@ -83,8 +86,8 @@ Done:
 - explicit sync metadata such as last successful refresh
 
 Missing for v1:
-- authentication/session flow
 - stronger semantics assertions and broader device coverage
+- auth hardening beyond seeded local accounts
 
 ## Relative to the final goal
 
@@ -106,6 +109,21 @@ Against that goal:
 - auth realism: not achieved yet
 
 That means we are past the "can this product exist?" stage and squarely in the "make the system realistic and trustworthy" stage.
+
+## Current UX modernization track
+
+Completed:
+
+1. `DB-UX-1` role-first sign in
+2. `DB-UX-2` split shell by role
+3. `DB-UX-3` queue-first hierarchy pass
+4. `DB-UX-4` locked / empty / error state cleanup
+5. `DB-UX-5` mobile web card layout
+6. `DB-UX-7` typography and surface polish
+
+Still worth doing:
+
+- `DB-UX-6` bring the best mobile information architecture labels and grouping patterns over to web where it still helps clarity
 
 ## Current parity plan
 

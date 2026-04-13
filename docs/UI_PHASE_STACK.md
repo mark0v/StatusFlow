@@ -7,7 +7,7 @@
 - Canva Dev MCP: configured at project level for Canva platform/dev docs
 - Mobile UI MCP: mobile-mcp is configured at project level
 - Android adb/emulator CLI: local `adb.exe` exists under `.local/android-sdk/platform-tools`
-- Android emulator binary is not installed in the local SDK yet
+- Android emulator tooling is available through the repo-local SDK and helper scripts under `scripts/`
 - `adb-mcp` is intentionally not enabled because of a published critical command-injection advisory on the public package
 
 ## Recommended stack
@@ -29,6 +29,8 @@ Auth note:
 
 - mobile-mcp as primary mobile interaction layer
 - local repo-scoped Android platform tools as the current Android fallback
+- `scripts/start-mobile-emulator.ps1` for headless automation
+- `scripts/start-mobile-emulator-visible.ps1` for visible manual testing
 
 Note:
 - `adb-mcp` is excluded for now due to a public GitHub security advisory (`GHSA-54j7-grvr-9xwg`) against the public package.

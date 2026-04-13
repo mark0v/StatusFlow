@@ -3,8 +3,8 @@
 StatusFlow is a multi-client learning project for building and testing a real workflow/status management system end to end.
 
 We are building:
-- `apps/mobile` for the end-user Android client
-- `apps/web` for operators and admins
+- `apps/mobile` for the Android client used by operators and customers
+- `apps/web` for the browser client used by operators and customers
 - `apps/api` for the backend API
 - PostgreSQL for the server-side data store
 - shared packages for contracts, test data, and typed models
@@ -29,6 +29,21 @@ The main goal is to practice realistic system design and QA:
 - `infra/` infrastructure-related assets
 - `scripts/` helper scripts
 - `docker-compose.yml` local development orchestration
+
+## Documentation map
+
+Start here when you need the current repo truth, not historical context:
+
+- [docs/LOCAL_DEV_LOOP.md](/C:/Users/nuc/source/repos/StatusFlow/docs/LOCAL_DEV_LOOP.md): end-to-end local runbook for API, web, and mobile
+- [docs/ARCHITECTURE.md](/C:/Users/nuc/source/repos/StatusFlow/docs/ARCHITECTURE.md): current system architecture and data flow
+- [docs/ROADMAP.md](/C:/Users/nuc/source/repos/StatusFlow/docs/ROADMAP.md): shipped milestones, open gaps, and next phases
+- [docs/TEST_STRATEGY.md](/C:/Users/nuc/source/repos/StatusFlow/docs/TEST_STRATEGY.md): automated test layers and expected coverage
+- [docs/UI_PHASE_STACK.md](/C:/Users/nuc/source/repos/StatusFlow/docs/UI_PHASE_STACK.md): UI tooling stack across browser, emulator, and design MCPs
+- [docs/MOBILE_UI_LOOP.md](/C:/Users/nuc/source/repos/StatusFlow/docs/MOBILE_UI_LOOP.md): focused Android emulator and preview loop
+- [apps/api/README.md](/C:/Users/nuc/source/repos/StatusFlow/apps/api/README.md): API endpoints, seeded auth flow, and local testing
+- [apps/web/README.md](/C:/Users/nuc/source/repos/StatusFlow/apps/web/README.md): web client behavior, test commands, and parity smoke entry points
+- [apps/mobile/README.md](/C:/Users/nuc/source/repos/StatusFlow/apps/mobile/README.md): mobile run modes, smoke checks, and instrumentation
+- [scripts/README.md](/C:/Users/nuc/source/repos/StatusFlow/scripts/README.md): helper script index
 
 ## Current stage
 

@@ -11,9 +11,21 @@ This project now has a working local Android emulator loop for `apps/mobile`.
 
 ## Start the emulator
 
+### Headless mode for automation
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/start-mobile-emulator.ps1
 ```
+
+This is the default automation path and uses a hidden `-no-window` emulator process.
+
+### Visible mode for manual testing
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-mobile-emulator-visible.ps1
+```
+
+Use `-RestartExisting` if a headless instance is already running and you want to reopen the same AVD as a visible window.
 
 ## Install the app and capture a screenshot
 
