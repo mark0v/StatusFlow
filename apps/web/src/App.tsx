@@ -1002,6 +1002,7 @@ export default function App() {
               sortDirection={sortDirection}
               syncSource={syncSource}
               syncNotice={syncNotice}
+              lastRefreshedAt={lastRefreshedAt}
               pendingMutationCount={pendingMutationCount}
               queueNotice={queueNotice}
               queueError={queueError}

@@ -31,6 +31,7 @@ interface Props {
   sortDirection: SortDirection;
   syncSource: "live" | "cached";
   syncNotice: string | null;
+  lastRefreshedAt: string | null;
   pendingMutationCount: number;
   queueNotice: string | null;
   queueError: string | null;
@@ -57,6 +58,21 @@ function sortIndicator(field: SortField, sortField: SortField, sortDirection: So
   return sortDirection === "asc" ? " ↑" : " ↓";
 }
 
+function formatSyncLabel(lastRefreshedAt: string | null, isRefreshing: boolean) {
+  if (isRefreshing) {
+    return "Syncing";
+  }
+
+  if (!lastRefreshedAt) {
+    return "Sync pending";
+  }
+
+  return `Sync ${new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(lastRefreshedAt))}`;
+}
+
 export function OrderTable({
   orders,
   paginatedOrders,
@@ -79,6 +95,7 @@ export function OrderTable({
   sortDirection,
   syncSource,
   syncNotice,
+  lastRefreshedAt,
   pendingMutationCount,
   queueNotice,
   queueError,
@@ -110,14 +127,18 @@ export function OrderTable({
         </label>
 
         <div className="toolbar-actions">
-          <button
-            className="secondary-action"
-            disabled={isLoading || isRefreshing}
-            onClick={() => void onRefresh()}
-            type="button"
-          >
-            {isRefreshing ? "Refreshing..." : "Refresh"}
-          </button>
+          <div className={`sync-pill ${syncSource === "cached" ? "cached" : ""}`}>
+            <button
+              aria-label="Refresh orders"
+              className="refresh-icon-button"
+              disabled={isLoading || isRefreshing}
+              onClick={() => void onRefresh()}
+              type="button"
+            >
+              ↻
+            </button>
+            <span>{formatSyncLabel(lastRefreshedAt, isRefreshing)}</span>
+          </div>
           <button
             className="primary-action"
             onClick={onToggleCreateOpen}
