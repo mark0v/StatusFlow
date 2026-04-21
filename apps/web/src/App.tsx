@@ -88,7 +88,6 @@ export default function App() {
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [statusFilter, setStatusFilter] = useState<OrderStatus[]>([]);
-  const [isStatusFilterOpen, setIsStatusFilterOpen] = useState(false);
   const [openActionsOrderId, setOpenActionsOrderId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<OrderDetail | null>(null);
@@ -450,10 +449,6 @@ export default function App() {
         return;
       }
 
-      if (!target.closest(".column-filter-wrap")) {
-        setIsStatusFilterOpen(false);
-      }
-
       if (!target.closest(".row-action-menu")) {
         setOpenActionsOrderId(null);
       }
@@ -511,12 +506,8 @@ export default function App() {
     setPage(1);
   }
 
-  function toggleStatusFilter(status: OrderStatus) {
-    setStatusFilter((current) =>
-      current.includes(status)
-        ? current.filter((entry) => entry !== status)
-        : [...current, status]
-    );
+  function selectStatusFilter(status: OrderStatus | null) {
+    setStatusFilter(status ? [status] : []);
     setPage(1);
   }
 
@@ -984,7 +975,12 @@ export default function App() {
         </div>
 
         <section className="panel panel-console">
-          <StatusSummary groupedStatuses={groupedStatuses} />
+          <StatusSummary
+            activeStatusFilter={statusFilter.length === 1 ? statusFilter[0] : null}
+            groupedStatuses={groupedStatuses}
+            totalCount={orders.length}
+            onStatusFilterChange={selectStatusFilter}
+          />
 
           <div className="console-grid">
             <OrderTable
@@ -999,8 +995,6 @@ export default function App() {
               isOperator={isOperator}
               isCreateOpen={isCreateOpen}
               searchQuery={searchQuery}
-              statusFilter={statusFilter}
-              isStatusFilterOpen={isStatusFilterOpen}
               page={page}
               pageSize={pageSize}
               totalPages={totalPages}
@@ -1024,8 +1018,6 @@ export default function App() {
               onFormTitleChange={(title) => setFormState((current) => ({ ...current, title }))}
               onFormDescriptionChange={(description) => setFormState((current) => ({ ...current, description }))}
               onToggleSort={toggleSort}
-              onToggleStatusFilter={toggleStatusFilter}
-              onToggleStatusFilterOpen={() => setIsStatusFilterOpen((current) => !current)}
               onSelectOrder={setSelectedOrderId}
               onToggleActionsOrderId={setOpenActionsOrderId}
               onTransition={handleTransition}

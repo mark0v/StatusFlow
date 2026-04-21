@@ -1,7 +1,6 @@
 import {
   formatTimestamp,
   historySummary,
-  orderedStatuses,
   statusLabels,
   statusTone,
   type OrderCard,
@@ -24,8 +23,6 @@ interface Props {
   isOperator: boolean;
   isCreateOpen: boolean;
   searchQuery: string;
-  statusFilter: OrderStatus[];
-  isStatusFilterOpen: boolean;
   page: number;
   pageSize: number;
   totalPages: number;
@@ -49,8 +46,6 @@ interface Props {
   onFormTitleChange: (title: string) => void;
   onFormDescriptionChange: (description: string) => void;
   onToggleSort: (field: SortField) => void;
-  onToggleStatusFilter: (status: OrderStatus) => void;
-  onToggleStatusFilterOpen: () => void;
   onSelectOrder: (orderId: string) => void;
   onToggleActionsOrderId: (orderId: string | null) => void;
   onTransition: (orderId: string, toStatus: OrderStatus) => void;
@@ -77,8 +72,6 @@ export function OrderTable({
   isOperator,
   isCreateOpen,
   searchQuery,
-  statusFilter,
-  isStatusFilterOpen,
   page,
   pageSize,
   totalPages,
@@ -102,8 +95,6 @@ export function OrderTable({
   onFormTitleChange,
   onFormDescriptionChange,
   onToggleSort,
-  onToggleStatusFilter,
-  onToggleStatusFilterOpen,
   onSelectOrder,
   onToggleActionsOrderId,
   onTransition,
@@ -259,36 +250,13 @@ export function OrderTable({
                   </button>
                 </th>
                 <th>
-                  <div className="column-filter-wrap">
-                    <button
-                      className="column-sort"
-                      onClick={() => onToggleSort("status")}
-                      type="button"
-                    >
-                      Status <span>{sortIndicator("status", sortField, sortDirection)}</span>
-                    </button>
-                    <button
-                      className={`filter-trigger ${statusFilter.length > 0 ? "active" : ""}`}
-                      onClick={onToggleStatusFilterOpen}
-                      type="button"
-                    >
-                      Filter
-                    </button>
-                    {isStatusFilterOpen ? (
-                      <div className="filter-menu">
-                        {orderedStatuses.map((status) => (
-                          <label className="filter-option" key={status}>
-                            <input
-                              checked={statusFilter.includes(status)}
-                              onChange={() => onToggleStatusFilter(status)}
-                              type="checkbox"
-                            />
-                            <span>{statusLabels[status]}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                  <button
+                    className="column-sort"
+                    onClick={() => onToggleSort("status")}
+                    type="button"
+                  >
+                    Status <span>{sortIndicator("status", sortField, sortDirection)}</span>
+                  </button>
                 </th>
                 <th>
                   <button

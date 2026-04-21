@@ -160,15 +160,14 @@ a {
 
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
   align-items: stretch;
-  opacity: 0.7;
 }
 
 .summary-strip .status-card {
   min-height: auto;
-  padding: 10px 12px;
+  padding: 10px 14px;
   background: rgba(255, 255, 255, 0.03);
   border-color: rgba(255, 255, 255, 0.06);
 }
@@ -611,13 +610,33 @@ a {
 }
 
 .status-card {
-  min-height: 108px;
-  padding: 13px 14px;
+  min-height: 62px;
+  padding: 10px 14px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   display: grid;
   gap: 8px;
+}
+
+.status-card-filter {
+  width: 100%;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.status-card-filter:hover {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.status-card-filter.active {
+  background: linear-gradient(180deg, rgba(90, 123, 255, 0.22), rgba(90, 123, 255, 0.07));
+  border-color: rgba(141, 178, 255, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(141, 178, 255, 0.18), 0 0 0 3px rgba(90, 123, 255, 0.08);
 }
 
 .status-card span {
@@ -626,7 +645,7 @@ a {
 }
 
 .status-card strong {
-  font-size: 1.3rem;
+  font-size: 1.25rem;
 }
 
 .feedback-cached {
