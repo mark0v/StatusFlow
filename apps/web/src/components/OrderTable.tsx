@@ -114,6 +114,11 @@ export function OrderTable({
   onPageChange,
   onPageSizeChange
 }: Props) {
+  const visibleColumnCount = isOperator ? 6 : 4;
+  const searchPlaceholder = isOperator
+    ? "Search code, title, or customer"
+    : "Search code or title";
+
   return (
     <section className="table-stage">
       <div className="queue-controls">
@@ -121,7 +126,7 @@ export function OrderTable({
           <input
             aria-label="Search queue"
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search code, title, or customer"
+            placeholder={searchPlaceholder}
             value={searchQuery}
           />
         </label>
@@ -154,7 +159,7 @@ export function OrderTable({
           <div className="section-heading">
             <div>
               <p className="eyebrow">Create order</p>
-              <h3>Add a new order to the live queue</h3>
+              <h3>{isOperator ? "Add a new order to the live queue" : "Create a new request"}</h3>
             </div>
           </div>
 
@@ -175,7 +180,9 @@ export function OrderTable({
               <textarea
                 value={formState.description}
                 onChange={(event) => onFormDescriptionChange(event.target.value)}
-                placeholder="Add context that web and mobile operators should both see."
+                placeholder={isOperator
+                  ? "Add context that web and mobile operators should both see."
+                  : "Tell us what happened and what you need help with."}
                 rows={3}
               />
             </label>
@@ -242,24 +249,26 @@ export function OrderTable({
             <colgroup>
               <col className="col-code" />
               <col className="col-title" />
-              <col className="col-customer" />
+              {isOperator ? <col className="col-customer" /> : null}
               <col className="col-status" />
               <col className="col-updated" />
-              <col className="col-actions" />
+              {isOperator ? <col className="col-actions" /> : null}
             </colgroup>
             <thead>
               <tr>
                 <th>Code</th>
                 <th>Title</th>
-                <th>
-                  <button
-                    className="column-sort"
-                    onClick={() => onToggleSort("customer_name")}
-                    type="button"
-                  >
-                    Customer <span className="sort-icon">{sortIndicator("customer_name", sortField, sortDirection)}</span>
-                  </button>
-                </th>
+                {isOperator ? (
+                  <th>
+                    <button
+                      className="column-sort"
+                      onClick={() => onToggleSort("customer_name")}
+                      type="button"
+                    >
+                      Customer <span className="sort-icon">{sortIndicator("customer_name", sortField, sortDirection)}</span>
+                    </button>
+                  </th>
+                ) : null}
                 <th>
                   <button
                     className="column-sort"
@@ -278,13 +287,13 @@ export function OrderTable({
                     Updated <span className="sort-icon">{sortIndicator("updated_at", sortField, sortDirection)}</span>
                   </button>
                 </th>
-                <th>Actions</th>
+                {isOperator ? <th>Actions</th> : null}
               </tr>
             </thead>
             <tbody>
               {paginatedOrders.length === 0 ? (
                 <tr>
-                  <td className="empty-row" colSpan={6}>
+                  <td className="empty-row" colSpan={visibleColumnCount}>
                     <span className="empty-row-eyebrow">No matching orders</span>
                     <strong>Nothing matches the current queue controls.</strong>
                     <p>Clear the search or active status filters to bring orders back into view.</p>
@@ -302,55 +311,55 @@ export function OrderTable({
                     >
                       <td className="cell-code">{order.code}</td>
                       <td className="cell-title">{order.title}</td>
-                      <td className="cell-customer">{order.customer_name}</td>
+                      {isOperator ? <td className="cell-customer">{order.customer_name}</td> : null}
                       <td>
                         <span className={`pill ${statusTone(order.status)}`}>
                           {statusLabels[order.status]}
                         </span>
                       </td>
                       <td className="cell-updated">{formatTimestamp(order.updated_at)}</td>
-                      <td className="cell-actions">
-                        <div className="table-actions">
-                          {nextStatuses.length === 0 ? (
-                            <span className="transition-terminal">Terminal state</span>
-                          ) : order.id.startsWith("queued-order-") ? (
-                            <span className="transition-terminal">Queued offline</span>
-                          ) : !isOperator ? (
-                            <span className="transition-terminal">Operator only</span>
-                          ) : (
-                            <div className="row-action-menu">
-                              <button
-                                className="transition-button transition-trigger"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onToggleActionsOrderId(openActionsOrderId === order.id ? null : order.id);
-                                }}
-                                type="button"
-                              >
-                                Change status
-                              </button>
-                              {openActionsOrderId === order.id ? (
-                                <div className="row-dropdown">
-                                  {nextStatuses.map((status) => (
-                                    <button
-                                      key={status}
-                                      className="dropdown-action"
-                                      disabled={isSubmitting}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        void onTransition(order.id, status);
-                                      }}
-                                      type="button"
-                                    >
-                                      {statusLabels[status]}
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          )}
-                        </div>
-                      </td>
+                      {isOperator ? (
+                        <td className="cell-actions">
+                          <div className="table-actions">
+                            {nextStatuses.length === 0 ? (
+                              <span className="transition-terminal">Terminal state</span>
+                            ) : order.id.startsWith("queued-order-") ? (
+                              <span className="transition-terminal">Queued offline</span>
+                            ) : (
+                              <div className="row-action-menu">
+                                <button
+                                  className="transition-button transition-trigger"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onToggleActionsOrderId(openActionsOrderId === order.id ? null : order.id);
+                                  }}
+                                  type="button"
+                                >
+                                  Change status
+                                </button>
+                                {openActionsOrderId === order.id ? (
+                                  <div className="row-dropdown">
+                                    {nextStatuses.map((status) => (
+                                      <button
+                                        key={status}
+                                        className="dropdown-action"
+                                        disabled={isSubmitting}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          void onTransition(order.id, status);
+                                        }}
+                                        type="button"
+                                      >
+                                        {statusLabels[status]}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })

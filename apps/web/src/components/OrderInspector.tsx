@@ -45,6 +45,11 @@ export function OrderInspector({
 }: Props) {
   const [activeTab, setActiveTab] = useState<InspectorTab>("overview");
   const visibleComments = isOperator ? selectedOrderDetail?.comments ?? [] : [];
+  const commentTabLabel = isOperator ? "Comments" : "Messages";
+  const commentCount = isOperator ? visibleComments.length : 0;
+  const supportHref = selectedOrderDetail
+    ? `mailto:support@statusflow.local?subject=${encodeURIComponent(`Order ${selectedOrderDetail.code}`)}`
+    : "mailto:support@statusflow.local";
 
   return (
     <section className="detail-inspector">
@@ -143,8 +148,7 @@ export function OrderInspector({
               role="tab"
               type="button"
             >
-              {isOperator ? "Comments" : "Messages"}{" "}
-              <span className="inspector-count">{visibleComments.length}</span>
+              {commentTabLabel} <span className="inspector-count">{commentCount}</span>
             </button>
           </div>
 
@@ -159,6 +163,15 @@ export function OrderInspector({
                   <span>Description</span>
                   <p>{selectedOrderDetail.description || "No description yet."}</p>
                 </div>
+                {!isOperator && (
+                  <div className="detail-field-card detail-field-wide">
+                    <span>Need help?</span>
+                    <p>Contact support if this request needs a correction or a faster update.</p>
+                    <a className="secondary-action customer-support-action" href={supportHref}>
+                      Contact support
+                    </a>
+                  </div>
+                )}
               </div>
             )}
 
@@ -215,13 +228,16 @@ export function OrderInspector({
 
                 {!isOperator && (
                   <div className="mini-empty">
-                    Messages are visible in operator mode for now.
+                    No customer messages yet. Use support for updates that should not wait.
+                    <a className="secondary-action customer-support-action" href={supportHref}>
+                      Contact support
+                    </a>
                   </div>
                 )}
 
                 {visibleComments.length === 0 && isOperator && !selectedOrderIsQueuedDraft ? (
                   <div className="mini-empty">No comments yet.</div>
-                ) : (
+                ) : isOperator ? (
                   <div className="tab-scroll-list">
                     <div className="timeline-list">
                       {[...visibleComments].reverse().map((comment) => (
@@ -233,7 +249,7 @@ export function OrderInspector({
                       ))}
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
             )}
           </div>

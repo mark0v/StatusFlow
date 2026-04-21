@@ -1080,6 +1080,12 @@ a {
   color: #b9c7d8;
 }
 
+.customer-support-action {
+  margin-top: 4px;
+  text-decoration: none;
+  justify-self: start;
+}
+
 .detail-field-wide {
   grid-column: 1 / -1;
 }
@@ -1166,6 +1172,8 @@ a {
 }
 
 .mini-empty {
+  display: grid;
+  gap: 10px;
   padding: 14px;
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.03);
