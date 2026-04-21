@@ -362,12 +362,8 @@ export function OrderTable({
         {sortedOrders.length > 0 ? (
           <div className="pagination-bar">
             <div className="pagination-info">
-              <span>
-                Showing {(page - 1) * pageSize + 1}–
-                {Math.min(page * pageSize, sortedOrders.length)} of {sortedOrders.length} orders
-              </span>
               <label className="page-size-selector">
-                <span>Per page:</span>
+                <span>Rows per page</span>
                 <select
                   value={pageSize}
                   onChange={(event) => {
@@ -382,6 +378,10 @@ export function OrderTable({
                   ))}
                 </select>
               </label>
+              <span>
+                Showing {(page - 1) * pageSize + 1}–
+                {Math.min(page * pageSize, sortedOrders.length)} of {sortedOrders.length} orders
+              </span>
             </div>
             {totalPages > 1 ? (
               <div className="pagination-controls">

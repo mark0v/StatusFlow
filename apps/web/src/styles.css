@@ -812,8 +812,8 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 16px;
-  padding: 12px 4px;
+  margin-top: 0;
+  padding: 14px 4px 4px;
   flex-wrap: wrap;
 }
 
@@ -831,12 +831,16 @@ a {
   gap: 8px;
   color: #8ea6c4;
   font-size: 0.85rem;
+  padding: 5px 5px 5px 12px;
+  border: 1px solid rgba(141, 178, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(141, 178, 255, 0.06);
 }
 
 .page-size-selector select {
-  background: rgba(9, 17, 31, 0.6);
+  background: rgba(9, 17, 31, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  border-radius: 999px;
   color: #e8edf2;
   padding: 4px 8px;
   font-size: 0.85rem;
@@ -894,11 +898,11 @@ a {
 }
 
 .pagination-page-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
   color: #8ea6c4;
-  padding: 4px 10px;
+  padding: 6px 10px;
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.15s ease;
