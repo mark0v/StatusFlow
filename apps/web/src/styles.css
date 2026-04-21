@@ -42,7 +42,7 @@ a {
 }
 
 .shell {
-  width: min(1240px, calc(100% - 40px));
+  width: min(1500px, calc(100% - 40px));
   margin: 0 auto;
   padding: 28px 0 72px;
   overflow: visible;
@@ -106,7 +106,7 @@ a {
 
 .hero-logo {
   display: block;
-  width: min(340px, 100%);
+  width: min(360px, 100%);
   height: auto;
 }
 
@@ -136,8 +136,26 @@ a {
 
 .panel-console {
   display: grid;
-  gap: 20px;
+  gap: 18px;
   overflow: visible;
+}
+
+.console-heading {
+  margin: 0 0 18px;
+}
+
+.console-heading h1 {
+  margin: 0;
+  font-size: clamp(1.45rem, 2.4vw, 1.9rem);
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.console-grid {
+  display: grid;
+  grid-template-columns: minmax(720px, 1fr) minmax(360px, 410px);
+  gap: 18px;
+  align-items: start;
 }
 
 .summary-strip {
@@ -823,7 +841,11 @@ a {
 .detail-inspector {
   display: grid;
   gap: 14px;
-  opacity: 0.85;
+  opacity: 0.95;
+  position: sticky;
+  top: 20px;
+  max-height: calc(100vh - 56px);
+  overflow: auto;
 }
 
 .detail-inspector .inspector-card {
@@ -852,7 +874,7 @@ a {
 
 .inspector-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
@@ -1209,6 +1231,18 @@ a {
   margin-top: -4px;
 }
 
+@media (max-width: 1120px) {
+  .console-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-inspector {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 @media (max-width: 1100px) {
   .summary-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1216,6 +1250,10 @@ a {
 }
 
 @media (max-width: 900px) {
+  .console-heading h1 {
+    font-size: 1.45rem;
+  }
+
   .create-form,
   .summary-strip {
     grid-template-columns: 1fr;

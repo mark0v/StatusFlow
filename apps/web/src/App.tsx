@@ -475,8 +475,8 @@ export default function App() {
   );
   const isOperator = session?.user.role === "operator";
   const consoleTitle = isOperator
-    ? "Today's queue"
-    : "My requests";
+    ? "Active orders"
+    : "My orders";
   const queueSectionTitle = isOperator
     ? "Keep requests moving"
     : "Track status and updates";
@@ -979,78 +979,78 @@ export default function App() {
           userRole={session.user.role}
         />
 
-        <section className="panel panel-console">
-          <div className="panel-header">
-            <div>
-              <h2>{consoleTitle}</h2>
-            </div>
-          </div>
+        <div className="console-heading">
+          <h1>{consoleTitle}</h1>
+        </div>
 
+        <section className="panel panel-console">
           <StatusSummary groupedStatuses={groupedStatuses} />
 
-          <OrderTable
-            sectionTitle={queueSectionTitle}
-            orders={orders}
-            paginatedOrders={paginatedOrders}
-            sortedOrders={sortedOrders}
-            lifecycle={lifecycle}
-            isLoading={isLoading}
-            isRefreshing={isRefreshing}
-            isSubmitting={isSubmitting}
-            isOperator={isOperator}
-            isCreateOpen={isCreateOpen}
-            searchQuery={searchQuery}
-            statusFilter={statusFilter}
-            isStatusFilterOpen={isStatusFilterOpen}
-            page={page}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            actionError={actionError}
-            currentCustomer={currentCustomer}
-            selectedOrderId={selectedOrderId}
-            openActionsOrderId={openActionsOrderId}
-            sortField={sortField}
-            sortDirection={sortDirection}
-            syncSource={syncSource}
-            syncNotice={syncNotice}
-            pendingMutationCount={pendingMutationCount}
-            queueNotice={queueNotice}
-            queueError={queueError}
-            error={error}
-            formState={formState}
-            onSearchChange={setSearchQuery}
-            onRefresh={handleRefresh}
-            onToggleCreateOpen={() => setIsCreateOpen((current) => !current)}
-            onCreateOrder={handleCreateOrder}
-            onFormTitleChange={(title) => setFormState((current) => ({ ...current, title }))}
-            onFormDescriptionChange={(description) => setFormState((current) => ({ ...current, description }))}
-            onToggleSort={toggleSort}
-            onToggleStatusFilter={toggleStatusFilter}
-            onToggleStatusFilterOpen={() => setIsStatusFilterOpen((current) => !current)}
-            onSelectOrder={setSelectedOrderId}
-            onToggleActionsOrderId={setOpenActionsOrderId}
-            onTransition={handleTransition}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
+          <div className="console-grid">
+            <OrderTable
+              sectionTitle={queueSectionTitle}
+              orders={orders}
+              paginatedOrders={paginatedOrders}
+              sortedOrders={sortedOrders}
+              lifecycle={lifecycle}
+              isLoading={isLoading}
+              isRefreshing={isRefreshing}
+              isSubmitting={isSubmitting}
+              isOperator={isOperator}
+              isCreateOpen={isCreateOpen}
+              searchQuery={searchQuery}
+              statusFilter={statusFilter}
+              isStatusFilterOpen={isStatusFilterOpen}
+              page={page}
+              pageSize={pageSize}
+              totalPages={totalPages}
+              actionError={actionError}
+              currentCustomer={currentCustomer}
+              selectedOrderId={selectedOrderId}
+              openActionsOrderId={openActionsOrderId}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              syncSource={syncSource}
+              syncNotice={syncNotice}
+              pendingMutationCount={pendingMutationCount}
+              queueNotice={queueNotice}
+              queueError={queueError}
+              error={error}
+              formState={formState}
+              onSearchChange={setSearchQuery}
+              onRefresh={handleRefresh}
+              onToggleCreateOpen={() => setIsCreateOpen((current) => !current)}
+              onCreateOrder={handleCreateOrder}
+              onFormTitleChange={(title) => setFormState((current) => ({ ...current, title }))}
+              onFormDescriptionChange={(description) => setFormState((current) => ({ ...current, description }))}
+              onToggleSort={toggleSort}
+              onToggleStatusFilter={toggleStatusFilter}
+              onToggleStatusFilterOpen={() => setIsStatusFilterOpen((current) => !current)}
+              onSelectOrder={setSelectedOrderId}
+              onToggleActionsOrderId={setOpenActionsOrderId}
+              onTransition={handleTransition}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
 
-          <OrderInspector
-            selectedOrderDetail={selectedOrderDetail}
-            detailError={detailError}
-            isDetailLoading={isDetailLoading}
-            isRefreshing={isRefreshing}
-            isSubmitting={isSubmitting}
-            isOperator={isOperator}
-            selectedOrderId={selectedOrderId}
-            selectedOrderIsQueuedDraft={selectedOrderIsQueuedDraft}
-            commentDraft={commentDraft}
-            recoveryCandidateOrder={recoveryCandidateOrder}
-            onRefresh={handleRefresh}
-            onClearSelection={handleClearSelection}
-            onRecoverSelection={handleRecoverSelection}
-            onCommentDraftChange={setCommentDraft}
-            onAddComment={handleAddComment}
-          />
+            <OrderInspector
+              selectedOrderDetail={selectedOrderDetail}
+              detailError={detailError}
+              isDetailLoading={isDetailLoading}
+              isRefreshing={isRefreshing}
+              isSubmitting={isSubmitting}
+              isOperator={isOperator}
+              selectedOrderId={selectedOrderId}
+              selectedOrderIsQueuedDraft={selectedOrderIsQueuedDraft}
+              commentDraft={commentDraft}
+              recoveryCandidateOrder={recoveryCandidateOrder}
+              onRefresh={handleRefresh}
+              onClearSelection={handleClearSelection}
+              onRecoverSelection={handleRecoverSelection}
+              onCommentDraftChange={setCommentDraft}
+              onAddComment={handleAddComment}
+            />
+          </div>
         </section>
       </main>
     </ErrorBoundary>
