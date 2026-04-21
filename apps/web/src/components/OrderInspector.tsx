@@ -167,23 +167,25 @@ export function OrderInspector({
                 {selectedOrderDetail.history.length === 0 ? (
                   <div className="mini-empty">No changes yet.</div>
                 ) : (
-                  <div className="timeline-list">
-                    {[...selectedOrderDetail.history].reverse().map((event) => (
-                      <article className="timeline-item" key={event.id}>
-                        <strong>{historySummary(event)}</strong>
-                        <span>
-                          {event.changed_by.name} - {formatTimestamp(event.changed_at)}
-                        </span>
-                        <p>{event.reason}</p>
-                      </article>
-                    ))}
+                  <div className="tab-scroll-list">
+                    <div className="timeline-list">
+                      {[...selectedOrderDetail.history].reverse().map((event) => (
+                        <article className="timeline-item" key={event.id}>
+                          <strong>{historySummary(event)}</strong>
+                          <span>
+                            {event.changed_by.name} - {formatTimestamp(event.changed_at)}
+                          </span>
+                          <p>{event.reason}</p>
+                        </article>
+                      ))}
+                    </div>
                   </div>
                 )}
               </>
             )}
 
             {activeTab === "comments" && (
-              <>
+              <div className="tab-panel-stack">
                 {isOperator && !selectedOrderIsQueuedDraft && (
                   <form className="comment-form" onSubmit={onAddComment}>
                     <label className="field field-wide">
@@ -220,17 +222,19 @@ export function OrderInspector({
                 {visibleComments.length === 0 && isOperator && !selectedOrderIsQueuedDraft ? (
                   <div className="mini-empty">No comments yet.</div>
                 ) : (
-                  <div className="timeline-list">
-                    {[...visibleComments].reverse().map((comment) => (
-                      <article className="timeline-item" key={comment.id}>
-                        <strong>{comment.author.name}</strong>
-                        <span>{formatTimestamp(comment.created_at)}</span>
-                        <p>{comment.body}</p>
-                      </article>
-                    ))}
+                  <div className="tab-scroll-list">
+                    <div className="timeline-list">
+                      {[...visibleComments].reverse().map((comment) => (
+                        <article className="timeline-item" key={comment.id}>
+                          <strong>{comment.author.name}</strong>
+                          <span>{formatTimestamp(comment.created_at)}</span>
+                          <p>{comment.body}</p>
+                        </article>
+                      ))}
+                    </div>
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </article>

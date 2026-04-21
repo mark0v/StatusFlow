@@ -928,7 +928,7 @@ a {
   position: sticky;
   top: 20px;
   max-height: calc(100vh - 56px);
-  overflow: auto;
+  overflow: visible;
 }
 
 .detail-inspector .inspector-card {
@@ -961,7 +961,10 @@ a {
   gap: 12px;
 }
 
-.order-detail-card {
+.inspector-card.order-detail-card {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  max-height: calc(100vh - 56px);
   padding: 0;
   overflow: hidden;
 }
@@ -1016,7 +1019,33 @@ a {
 }
 
 .inspector-tab-panel {
+  min-height: 0;
+  display: grid;
+  overflow: hidden;
   padding: 16px;
+}
+
+.tab-panel-stack {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.tab-scroll-list {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.tab-scroll-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tab-scroll-list::-webkit-scrollbar-thumb {
+  background: rgba(141, 178, 255, 0.22);
+  border-radius: 999px;
 }
 
 .detail-field-list {
@@ -1371,6 +1400,15 @@ a {
   .detail-inspector {
     position: static;
     max-height: none;
+    overflow: visible;
+  }
+
+  .inspector-card.order-detail-card {
+    max-height: none;
+  }
+
+  .inspector-tab-panel,
+  .tab-scroll-list {
     overflow: visible;
   }
 }
