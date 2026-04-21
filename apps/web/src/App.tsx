@@ -1047,7 +1047,6 @@ export default function App() {
               isRefreshing={isRefreshing}
               isSubmitting={isSubmitting}
               isOperator={isOperator}
-              selectedOrderId={selectedOrderId}
               selectedOrderIsQueuedDraft={selectedOrderIsQueuedDraft}
               commentDraft={commentDraft}
               recoveryCandidateOrder={recoveryCandidateOrder}

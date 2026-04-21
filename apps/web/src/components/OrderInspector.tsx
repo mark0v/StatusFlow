@@ -1,3 +1,4 @@
+import { useState, type FormEvent } from "react";
 import {
   formatTimestamp,
   historySummary,
@@ -14,7 +15,6 @@ interface Props {
   isRefreshing: boolean;
   isSubmitting: boolean;
   isOperator: boolean;
-  selectedOrderId: string | null;
   selectedOrderIsQueuedDraft: boolean;
   commentDraft: string;
   recoveryCandidateOrder: OrderCard | null;
@@ -22,8 +22,10 @@ interface Props {
   onClearSelection: () => void;
   onRecoverSelection: () => void;
   onCommentDraftChange: (draft: string) => void;
-  onAddComment: (event: React.FormEvent<HTMLFormElement>) => void;
+  onAddComment: (event: FormEvent<HTMLFormElement>) => void;
 }
+
+type InspectorTab = "overview" | "history" | "comments";
 
 export function OrderInspector({
   selectedOrderDetail,
@@ -32,7 +34,6 @@ export function OrderInspector({
   isRefreshing,
   isSubmitting,
   isOperator,
-  selectedOrderId,
   selectedOrderIsQueuedDraft,
   commentDraft,
   recoveryCandidateOrder,
@@ -42,18 +43,17 @@ export function OrderInspector({
   onCommentDraftChange,
   onAddComment
 }: Props) {
+  const [activeTab, setActiveTab] = useState<InspectorTab>("overview");
   const visibleComments = isOperator ? selectedOrderDetail?.comments ?? [] : [];
 
   return (
     <section className="detail-inspector">
-      {/* Nothing selected */}
       {!isDetailLoading && !detailError && !selectedOrderDetail && (
         <div className="inspector-empty">
           <p>Select an order to see its details.</p>
         </div>
       )}
 
-      {/* Loading */}
       {isDetailLoading && (
         <div className="feedback-card feedback-sync">
           <span className="feedback-eyebrow">Loading</span>
@@ -61,7 +61,6 @@ export function OrderInspector({
         </div>
       )}
 
-      {/* Error — order unavailable */}
       {!isDetailLoading && detailError && (
         <article className="inspector-card detail-recovery-card">
           <span className="feedback-eyebrow">Order not found</span>
@@ -96,10 +95,9 @@ export function OrderInspector({
         </article>
       )}
 
-      {/* Order detail visible */}
       {!isDetailLoading && !detailError && selectedOrderDetail && (
-        <div className="inspector-grid">
-          <article className="inspector-card inspector-summary">
+        <article className="inspector-card inspector-summary order-detail-card">
+          <div className="order-detail-card-head">
             <div className="inspector-topline">
               <span className="cell-code">{selectedOrderDetail.code}</span>
               <span className={`pill ${statusTone(selectedOrderDetail.status)}`}>
@@ -107,8 +105,6 @@ export function OrderInspector({
               </span>
             </div>
             <h4>{selectedOrderDetail.title}</h4>
-            <p>{selectedOrderDetail.description || "No description yet."}</p>
-
             <div className="inspector-meta">
               <div>
                 <span>Customer</span>
@@ -119,87 +115,125 @@ export function OrderInspector({
                 <strong>{formatTimestamp(selectedOrderDetail.updated_at)}</strong>
               </div>
             </div>
-          </article>
+          </div>
 
-          <article className="inspector-card">
-            <div className="inspector-section-heading">
-              <div>
-                <p className="eyebrow">History</p>
-                <h4>Status changes</h4>
-              </div>
-              <span className="inspector-count">{selectedOrderDetail.history.length}</span>
-            </div>
+          <div className="inspector-tabs" role="tablist" aria-label="Order detail sections">
+            <button
+              aria-selected={activeTab === "overview"}
+              className={`inspector-tab ${activeTab === "overview" ? "active" : ""}`}
+              onClick={() => setActiveTab("overview")}
+              role="tab"
+              type="button"
+            >
+              Overview
+            </button>
+            <button
+              aria-selected={activeTab === "history"}
+              className={`inspector-tab ${activeTab === "history" ? "active" : ""}`}
+              onClick={() => setActiveTab("history")}
+              role="tab"
+              type="button"
+            >
+              History <span className="inspector-count">{selectedOrderDetail.history.length}</span>
+            </button>
+            <button
+              aria-selected={activeTab === "comments"}
+              className={`inspector-tab ${activeTab === "comments" ? "active" : ""}`}
+              onClick={() => setActiveTab("comments")}
+              role="tab"
+              type="button"
+            >
+              {isOperator ? "Comments" : "Messages"}{" "}
+              <span className="inspector-count">{visibleComments.length}</span>
+            </button>
+          </div>
 
-            {selectedOrderDetail.history.length === 0 ? (
-              <div className="mini-empty">No changes yet.</div>
-            ) : (
-              <div className="timeline-list">
-                {[...selectedOrderDetail.history].reverse().map((event) => (
-                  <article className="timeline-item" key={event.id}>
-                    <strong>{historySummary(event)}</strong>
-                    <span>
-                      {event.changed_by.name} · {formatTimestamp(event.changed_at)}
-                    </span>
-                    <p>{event.reason}</p>
-                  </article>
-                ))}
+          <div className="inspector-tab-panel">
+            {activeTab === "overview" && (
+              <div className="detail-field-list">
+                <div className="detail-field-card">
+                  <span>Customer</span>
+                  <strong>{selectedOrderDetail.customer_name}</strong>
+                </div>
+                <div className="detail-field-card detail-field-wide">
+                  <span>Description</span>
+                  <p>{selectedOrderDetail.description || "No description yet."}</p>
+                </div>
               </div>
             )}
-          </article>
 
-          {isOperator && (
-            <article className="inspector-card">
-              <div className="inspector-section-heading">
-                <div>
-                  <p className="eyebrow">Notes</p>
-                  <h4>Operator comments</h4>
-                </div>
-                <span className="inspector-count">{visibleComments.length}</span>
-              </div>
+            {activeTab === "history" && (
+              <>
+                {selectedOrderDetail.history.length === 0 ? (
+                  <div className="mini-empty">No changes yet.</div>
+                ) : (
+                  <div className="timeline-list">
+                    {[...selectedOrderDetail.history].reverse().map((event) => (
+                      <article className="timeline-item" key={event.id}>
+                        <strong>{historySummary(event)}</strong>
+                        <span>
+                          {event.changed_by.name} - {formatTimestamp(event.changed_at)}
+                        </span>
+                        <p>{event.reason}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
 
-              {!selectedOrderIsQueuedDraft && (
-                <form className="comment-form" onSubmit={onAddComment}>
-                  <label className="field field-wide">
-                    <span>Add a note</span>
-                    <textarea
-                      value={commentDraft}
-                      onChange={(event) => onCommentDraftChange(event.target.value)}
-                      placeholder="Leave context for the next operator."
-                      rows={3}
-                    />
-                  </label>
-                  <button
-                    className="primary-action"
-                    disabled={isSubmitting || commentDraft.trim().length === 0}
-                    type="submit"
-                  >
-                    {isSubmitting ? "Posting..." : "Post"}
-                  </button>
-                </form>
-              )}
+            {activeTab === "comments" && (
+              <>
+                {isOperator && !selectedOrderIsQueuedDraft && (
+                  <form className="comment-form" onSubmit={onAddComment}>
+                    <label className="field field-wide">
+                      <span>Add a comment</span>
+                      <textarea
+                        value={commentDraft}
+                        onChange={(event) => onCommentDraftChange(event.target.value)}
+                        placeholder="Leave context for the next operator."
+                        rows={3}
+                      />
+                    </label>
+                    <button
+                      className="primary-action"
+                      disabled={isSubmitting || commentDraft.trim().length === 0}
+                      type="submit"
+                    >
+                      {isSubmitting ? "Posting..." : "Add comment"}
+                    </button>
+                  </form>
+                )}
 
-              {selectedOrderIsQueuedDraft && (
-                <div className="mini-empty">
-                  Sync this order before adding comments.
-                </div>
-              )}
+                {isOperator && selectedOrderIsQueuedDraft && (
+                  <div className="mini-empty">
+                    Sync this order before adding comments.
+                  </div>
+                )}
 
-              {visibleComments.length === 0 && !selectedOrderIsQueuedDraft ? (
-                <div className="mini-empty">No notes yet.</div>
-              ) : (
-                <div className="timeline-list">
-                  {[...visibleComments].reverse().map((comment) => (
-                    <article className="timeline-item" key={comment.id}>
-                      <strong>{comment.author.name}</strong>
-                      <span>{formatTimestamp(comment.created_at)}</span>
-                      <p>{comment.body}</p>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </article>
-          )}
-        </div>
+                {!isOperator && (
+                  <div className="mini-empty">
+                    Messages are visible in operator mode for now.
+                  </div>
+                )}
+
+                {visibleComments.length === 0 && isOperator && !selectedOrderIsQueuedDraft ? (
+                  <div className="mini-empty">No comments yet.</div>
+                ) : (
+                  <div className="timeline-list">
+                    {[...visibleComments].reverse().map((comment) => (
+                      <article className="timeline-item" key={comment.id}>
+                        <strong>{comment.author.name}</strong>
+                        <span>{formatTimestamp(comment.created_at)}</span>
+                        <p>{comment.body}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </article>
       )}
     </section>
   );
