@@ -264,6 +264,8 @@ Tests:
 
 ### WR-8: Right Card Tabs
 
+Status: done in `3e5578d`.
+
 Goal:
 
 Convert the inspector into a tabbed detail card.
@@ -278,7 +280,7 @@ Scope:
 - Add local tab state for `Overview`, `History`, and `Comments`.
 - For customer mode, label comments as `Messages`.
 - Add counts to `History` and `Comments/Messages`.
-- `Overview` shows customer, current status, and description.
+- `Overview` shows customer and description without duplicating the status pill.
 - `History` shows status timeline.
 - `Comments` shows operator comments and comment form for operators.
 - Customer `Messages` uses customer-safe copy and actions.
@@ -297,6 +299,8 @@ Tests:
 - Add customer read-only or customer-message visibility tests based on current product rule.
 
 ### WR-9: Scroll Containment For Detail Lists
+
+Status: done in `3ea8568`.
 
 Goal:
 
@@ -327,6 +331,8 @@ Tests:
 - Add browser QA screenshot at desktop height.
 
 ### WR-10: Customer Mode Refinement
+
+Status: done in `64b4fec`.
 
 Goal:
 
@@ -360,6 +366,8 @@ Tests:
 - Regression test that customer does not see operator-only status controls.
 
 ### WR-11: QA And Visual Pass
+
+Status: pending. Automated tests and browser QA are intentionally deferred until the test environment is handled separately.
 
 Goal:
 
@@ -413,4 +421,3 @@ Acceptance:
 - API schema changes.
 - Mobile redesign.
 - New state-management library.
-
