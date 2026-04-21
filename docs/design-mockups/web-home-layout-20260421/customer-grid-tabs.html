@@ -1,0 +1,270 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StatusFlow customer layout</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111d;
+      --surface: #0d1826;
+      --surface-2: #111f31;
+      --surface-3: #15263a;
+      --line: rgba(169, 188, 214, .18);
+      --line-strong: rgba(169, 188, 214, .32);
+      --text: #eef5ff;
+      --muted: #9fb0c4;
+      --soft: #718198;
+      --blue: #6db4ff;
+      --mint: #69ddbe;
+      --amber: #ffca76;
+      --red: #ff8c8c;
+      --shadow: 0 24px 90px rgba(0,0,0,.32);
+      font-family: ui-sans-serif, Segoe UI, system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(109, 180, 255, .17), transparent 34%),
+        radial-gradient(circle at 85% 18%, rgba(105, 221, 190, .08), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      padding: 28px;
+    }
+    .app { max-width: 1500px; margin: 0 auto; }
+    .topbar { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+    .brand-logo { width: 250px; height: auto; display: block; }
+    .user { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+    .avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3); border: 1px solid var(--line); color: var(--text); font-weight: 800; }
+    .hero { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: end; margin-bottom: 18px; }
+    h1 { margin: 0; font-size: clamp(22px, 2.4vw, 30px); letter-spacing: -.05em; line-height: 1; }
+    .workspace { display: grid; grid-template-columns: minmax(720px, 1fr) 410px; gap: 18px; align-items: start; }
+    .panel, .detail-card { border: 1px solid var(--line); background: rgba(13, 24, 38, .88); border-radius: 22px; box-shadow: var(--shadow); }
+    .panel { overflow: hidden; }
+    .panel-header { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .status-counters { display: grid; grid-template-columns: repeat(7, minmax(112px, 1fr)); gap: 10px; align-items: stretch; flex: 1; }
+    .counter { min-height: 62px; display: grid; align-content: center; gap: 8px; padding: 10px 14px; border-radius: 22px; background: rgba(255,255,255,.035); border: 1px solid var(--line); color: var(--muted); font-size: 15px; font-weight: 650; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; } .counter:hover { border-color: var(--line-strong); background: rgba(255,255,255,.055); } .counter.active { border-color: rgba(109,180,255,.78); background: linear-gradient(180deg, rgba(109,180,255,.22), rgba(109,180,255,.07)); box-shadow: inset 0 0 0 1px rgba(109,180,255,.22), 0 0 0 3px rgba(109,180,255,.08); }
+    .counter b { color: var(--text); font-size: 22px; letter-spacing: -.04em; }
+    .counter.new b { color: var(--blue); }
+    .counter.review b { color: var(--amber); }
+    .counter.approved b { color: var(--mint); }
+    .counter.rejected b { color: var(--red); } .counter.fulfilled b { color: var(--mint); } .counter.cancelled b { color: var(--soft); }
+    .toolbar { padding: 14px 18px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+    .input, .select, .button { height: 38px; border-radius: 999px; border: 1px solid var(--line); background: rgba(7,17,29,.8); color: var(--muted); padding: 0 13px; font-size: 13px; display: flex; align-items: center; }
+    .select, .button { background: var(--surface-2); color: var(--text); white-space: nowrap; }
+    .button.primary { border: 0; color: #051321; background: linear-gradient(135deg, #65adff, #65dabe); font-weight: 850; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { text-align: left; padding: 15px 18px; border-bottom: 1px solid rgba(169,188,214,.12); vertical-align: middle; }
+    th { color: var(--soft); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 800; background: rgba(255,255,255,.018); white-space: nowrap; }
+    td { font-size: 13px; color: var(--muted); }
+    .sort { display: inline-flex; align-items: center; gap: 7px; }
+    .sort-icon { width: 13px; height: 16px; display: inline-grid; place-items: center; color: rgba(159,176,196,.58); font-size: 10px; line-height: 8px; }
+    .sort-icon.active { color: var(--blue); }
+    .order-code { color: var(--text); font-weight: 850; margin-bottom: 5px; }
+    .order-title { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    tr.selected td { background: rgba(109,180,255,.145); box-shadow: inset 5px 0 0 var(--blue), inset 0 1px 0 rgba(109,180,255,.16), inset 0 -1px 0 rgba(109,180,255,.12); } tr.selected .order-code { color: #ffffff; }
+    tr:hover td { background: rgba(255,255,255,.035); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 760; }
+    .pill.review { color: var(--amber); background: rgba(255,202,118,.12); }
+    .pill.new { color: var(--blue); background: rgba(109,180,255,.12); }
+    .pill.done { color: var(--mint); background: rgba(105,221,190,.12); }
+    .pagination { min-height: 58px; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between; gap: 14px; color: var(--muted); font-size: 13px; } .pagination-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; } .sync-pill { height: 34px; display: inline-flex; align-items: center; gap: 8px; padding: 0 10px 0 6px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--muted); font-size: 12px; font-weight: 760; } .refresh-icon { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; border: 1px solid rgba(169,188,214,.24); background: rgba(7,17,29,.72); color: var(--blue); font-size: 14px; line-height: 1; }
+    .page-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .page-size { height: 34px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--text); padding: 0 10px; display: inline-flex; align-items: center; gap: 8px; font-weight: 760; }
+    .page-btn { min-width: 34px; height: 34px; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--muted); font-weight: 800; }
+    .page-btn.active { color: #06111f; background: var(--blue); border-color: transparent; }
+    .detail-card { position: sticky; top: 20px; overflow: hidden; max-height: calc(100vh - 56px); display: grid; grid-template-rows: auto auto 1fr; }
+    .detail-head { padding: 20px; border-bottom: 1px solid var(--line); }
+    .detail-eyebrow { color: var(--blue); font-size: 12px; font-weight: 850; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 8px; }
+    .detail-head h2 { margin: 0; font-size: 24px; letter-spacing: -.05em; line-height: 1.08; }
+    .detail-meta { margin-top: 10px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .action-row { display: flex; gap: 9px; margin-top: 16px; flex-wrap: wrap; }
+    .tabs { display: grid; grid-template-columns: repeat(3, 1fr); padding: 8px; gap: 7px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.025); }
+    .tab { height: 38px; border-radius: 14px; border: 1px solid transparent; display:flex; align-items:center; justify-content:center; gap: 7px; color: var(--muted); font-size: 13px; font-weight: 760; } .tab-count { min-width: 20px; height: 20px; display: grid; place-items: center; border-radius: 999px; background: rgba(255,255,255,.07); color: var(--text); font-size: 11px; }
+    .tab.active { color: var(--text); background: rgba(109,180,255,.12); border-color: rgba(109,180,255,.28); }
+    .tab-panel { padding: 16px 20px 20px; min-height: 420px; overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(109,180,255,.55) rgba(255,255,255,.06); } .tab-panel::-webkit-scrollbar { width: 10px; } .tab-panel::-webkit-scrollbar-thumb { background: rgba(109,180,255,.45); border-radius: 999px; border: 3px solid rgba(9,21,34,.92); }
+    .detail-grid { display: grid; gap: 14px; } .detail-field { padding: 14px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,.032); } .detail-label { color: var(--soft); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; font-weight: 850; margin-bottom: 7px; } .detail-value { color: var(--text); font-size: 14px; line-height: 1.45; } .detail-status { display: inline-flex; width: max-content; }
+    .mobile-preview { display: none; }
+    .tab-sections { display: grid; gap: 16px; }
+    .tab-mock { border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: rgba(255,255,255,.025); min-height: 0; } .tab-mock.scroll-demo { max-height: 330px; display: grid; grid-template-rows: 1fr; } .tab-mock.scroll-demo .tab-mock-body { overflow: auto; scrollbar-width: thin; scrollbar-color: rgba(109,180,255,.55) rgba(255,255,255,.06); }
+    .tab-mock-head { height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; border-bottom: 1px solid var(--line); color: var(--text); font-weight: 850; letter-spacing: -.02em; }
+    .tab-mock-body { padding: 14px; display: grid; gap: 12px; }
+    .detail-grid.two { grid-template-columns: 1fr 1fr; }
+    .detail-field.wide { grid-column: 1 / -1; }
+    .status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .history-list { display: grid; gap: 12px; }
+    .history-item { display: grid; grid-template-columns: 14px 1fr; gap: 11px; align-items: start; }
+    .history-rail { width: 10px; height: 10px; border-radius: 50%; margin-top: 5px; background: var(--blue); box-shadow: 0 0 0 5px rgba(109,180,255,.1); }
+    .history-copy { padding-bottom: 12px; border-bottom: 1px solid rgba(169,188,214,.12); }
+    .history-copy b { display: block; color: var(--text); font-size: 13px; margin-bottom: 4px; }
+    .history-copy span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .comment-list { display: grid; gap: 10px; } .comment-layout { display: grid; grid-template-rows: 1fr auto; min-height: 0; } .comment-scroll { display: grid; gap: 10px; overflow: auto; padding-right: 4px; } .comment-compose-wrap { position: sticky; bottom: 0; display: grid; gap: 10px; padding-top: 12px; background: linear-gradient(180deg, rgba(13,24,38,0), rgba(13,24,38,.98) 28%); }
+    .comment-box { border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.035); padding: 12px; }
+    .comment-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--soft); font-size: 11px; margin-bottom: 7px; }
+    .comment-author { color: var(--text); font-weight: 850; }
+    .comment-text { color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .comment-compose { min-height: 84px; border: 1px dashed rgba(169,188,214,.24); border-radius: 16px; padding: 12px; color: var(--soft); font-size: 13px; background: rgba(7,17,29,.45); }
+    @media (max-width: 1120px) { .hero { grid-template-columns: 1fr; } .workspace { grid-template-columns: 1fr; } .detail-card { position: static; } }
+    @media (max-width: 720px) {
+      body { padding: 16px; }
+      .brand-logo { width: 176px; }
+      .toolbar { grid-template-columns: 1fr; }
+      .panel-header, .pagination { align-items: stretch; flex-direction: column; }
+      .status-counters { justify-content: flex-start; }
+      table { display: none; }
+      .mobile-preview { display: grid; gap: 10px; padding: 14px; }
+      .mobile-card { padding: 14px; border-radius: 18px; border: 1px solid var(--line); background: rgba(255,255,255,.035); }
+      .mobile-card.selected { outline: 2px solid rgba(109,180,255,.4); }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <nav class="topbar">
+      <img class="brand-logo" src="file:///C:/Users/nuc/source/repos/StatusFlow/apps/web/src/assets/statusflow-logo.svg" alt="StatusFlow" />
+      <div class="user"><span>Customer mode</span><div class="avatar">AC</div></div>
+    </nav>
+
+    <section class="hero">
+      <h1>My orders</h1>
+    </section>
+
+    <section class="workspace">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="status-counters">
+            <span class="counter active"><span>Total</span><b>8</b></span>
+            <span class="counter new"><span>New</span><b>1</b></span>
+            <span class="counter review"><span>In review</span><b>4</b></span>
+            <span class="counter approved"><span>Approved</span><b>1</b></span>
+            <span class="counter rejected"><span>Rejected</span><b>0</b></span>
+            <span class="counter fulfilled"><span>Fulfilled</span><b>2</b></span>
+            <span class="counter cancelled"><span>Cancelled</span><b>0</b></span>
+          </div>
+          <div class="sync-pill"><span class="refresh-icon">↻</span><span>Sync 11:42</span></div>
+        </div>
+        <div class="toolbar">
+          <div class="input">Search code or title</div>
+          <div class="button primary">Create order</div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:34%"><span class="sort">Order <span class="sort-icon active">▲<br>▼</span></span></th>
+              <th><span class="sort">Submitted by <span class="sort-icon">▲<br>▼</span></span></th>
+              <th><span class="sort">Status <span class="sort-icon">▲<br>▼</span></span></th>
+              <th><span class="sort">Updated <span class="sort-icon active">▲<br>▼</span></span></th>
+              <th><span class="sort">Updated by <span class="sort-icon">▲<br>▼</span></span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="selected"><td><div class="order-code">SF-1042</div><div class="order-title">Replacement access badge</div></td><td>Your team</td><td><span class="pill review">In review</span></td><td>4m ago</td><td>Operator</td></tr>
+            <tr><td><div class="order-code">SF-1041</div><div class="order-title">Warehouse exception</div></td><td>Your team</td><td><span class="pill new">New</span></td><td>11m ago</td><td>Pending</td></tr>
+            <tr><td><div class="order-code">SF-1040</div><div class="order-title">Missing delivery scan</div></td><td>Your team</td><td><span class="pill review">In review</span></td><td>18m ago</td><td>Operator</td></tr>
+            <tr><td><div class="order-code">SF-1039</div><div class="order-title">Account address change</div></td><td>Your team</td><td><span class="pill done">Done</span></td><td>25m ago</td><td>Operator</td></tr>
+            <tr><td><div class="order-code">SF-1038</div><div class="order-title">Inventory count mismatch</div></td><td>Your team</td><td><span class="pill new">New</span></td><td>33m ago</td><td>Pending</td></tr>
+            <tr><td><div class="order-code">SF-1037</div><div class="order-title">New vendor setup</div></td><td>Your team</td><td><span class="pill review">In review</span></td><td>46m ago</td><td>Operator</td></tr>
+          </tbody>
+        </table>
+        <div class="mobile-preview">
+          <div class="mobile-card selected"><div class="order-code">SF-1042</div><div class="order-title">Replacement access badge · Your team</div></div>
+          <div class="mobile-card"><div class="order-code">SF-1041</div><div class="order-title">Warehouse exception · Your team</div></div>
+          <div class="mobile-card"><div class="order-code">SF-1040</div><div class="order-title">Missing delivery scan · Your team</div></div>
+        </div>
+        <div class="pagination">
+          <div class="pagination-left">
+            <span class="page-size">Rows per page <b>6</b> ▾</span>
+            <span>Showing 1-6 of 8 orders</span>
+          </div>
+          <div class="page-controls">
+            <span class="page-btn">‹</span>
+            <span class="page-btn active">1</span>
+            <span class="page-btn">2</span>
+            <span class="page-btn">›</span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="detail-card">
+        <div class="detail-head">
+          <h2>SF-1042 · Replacement access badge</h2>
+          <div class="detail-meta">Your team · In review · updated 4 minutes ago</div>
+          <div class="action-row"><div class="button primary">Contact support</div></div>
+        </div>
+        <div class="tabs">
+          <div class="tab active">Overview</div>
+          <div class="tab">History <span class="tab-count">3</span></div>
+          <div class="tab">Messages <span class="tab-count">2</span></div>
+        </div>
+        <div class="tab-panel tab-sections">
+          <section class="tab-mock">
+            <div class="tab-mock-body">
+              <div class="detail-grid two">
+                <div class="detail-field">
+                  <div class="detail-label">Customer</div>
+                  <div class="detail-value">Your team</div>
+                </div>
+                <div class="detail-field wide">
+                  <div class="detail-label">Description</div>
+                  <div class="detail-value">Replacement badge needed before the evening shift. Existing badge is blocked and the customer cannot access the warehouse floor.</div>
+                </div>
+                <div class="detail-field wide">
+                  <div class="detail-label">Available actions</div>
+                  <div class="status-row"><span class="button primary">Contact support</span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="tab-mock scroll-demo">
+            <div class="tab-mock-body">
+              <div class="history-list">
+                <div class="history-item"><span class="history-rail"></span><div class="history-copy"><b>Status changed to In review</b><span>Mira updated this order 4 minutes ago.</span></div></div>
+                <div class="history-item"><span class="history-rail"></span><div class="history-copy"><b>Support message added</b><span>Support marked this as same-day priority.</span></div></div>
+                <div class="history-item"><span class="history-rail"></span><div class="history-copy"><b>Assigned to operator team</b><span>Ownership changed from UnAssigned to operator team.</span></div></div>
+                <div class="history-item"><span class="history-rail"></span><div class="history-copy"><b>Status changed to New</b><span>The order entered the active queue.</span></div></div>
+                <div class="history-item"><span class="history-rail"></span><div class="history-copy"><b>Request details updated</b><span>Your team added warehouse floor access context.</span></div></div>
+                <div class="history-item"><span class="history-rail"></span><div class="history-copy"><b>Order created</b><span>Your team submitted the request today at 10:58.</span></div></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="tab-mock scroll-demo">
+            <div class="tab-mock-body">
+              <div class="comment-layout">
+                <div class="comment-scroll">
+                  <div class="comment-box"><div class="comment-meta"><span class="comment-author">Support</span><span>4m ago</span></div><div class="comment-text">We are treating this as same-day priority because it blocks the evening handoff.</div></div>
+                  <div class="comment-box"><div class="comment-meta"><span class="comment-author">Support</span><span>12m ago</span></div><div class="comment-text">The old badge appears locked. We are waiting for approval before changing status.</div></div>
+                  <div class="comment-box"><div class="comment-meta"><span class="comment-author">Your team</span><span>18m ago</span></div><div class="comment-text">Replacement should be issued to the night shift supervisor.</div></div>
+                  <div class="comment-box"><div class="comment-meta"><span class="comment-author">Support</span><span>26m ago</span></div><div class="comment-text">Support checked the previous access badge record. It was disabled after a failed handoff.</div></div>
+                  <div class="comment-box"><div class="comment-meta"><span class="comment-author">System</span><span>31m ago</span></div><div class="comment-text">Request moved into the support queue.</div></div>
+                </div>
+                <div class="comment-compose-wrap">
+                  <div class="comment-compose">Write a message to support...</div>
+                  <div class="action-row" style="margin-top:0"><span class="button primary">Send message</span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
