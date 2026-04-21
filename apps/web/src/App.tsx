@@ -472,9 +472,6 @@ export default function App() {
   const consoleTitle = isOperator
     ? "Active orders"
     : "My orders";
-  const queueSectionTitle = isOperator
-    ? "Keep requests moving"
-    : "Track status and updates";
   const currentCustomer = useMemo(() => resolveCurrentCustomer(users, session), [session, users]);
   const recoveryCandidateOrder = useMemo(
     () => resolveRecoveryCandidateOrder(orders, selectedOrderId),
@@ -984,7 +981,6 @@ export default function App() {
 
           <div className="console-grid">
             <OrderTable
-              sectionTitle={queueSectionTitle}
               orders={orders}
               paginatedOrders={paginatedOrders}
               sortedOrders={sortedOrders}

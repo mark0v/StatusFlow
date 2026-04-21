@@ -1,10 +1,8 @@
 import {
   formatTimestamp,
-  historySummary,
   statusLabels,
   statusTone,
   type OrderCard,
-  type OrderDetail,
   type OrderStatus,
   type OrderStatusLifecycle,
   type SortDirection,
@@ -12,7 +10,6 @@ import {
 } from "../data/webTypes";
 
 interface Props {
-  sectionTitle: string;
   orders: OrderCard[];
   paginatedOrders: OrderCard[];
   sortedOrders: OrderCard[];
@@ -55,13 +52,12 @@ interface Props {
 
 function sortIndicator(field: SortField, sortField: SortField, sortDirection: SortDirection) {
   if (sortField !== field) {
-    return "";
+    return "↕";
   }
   return sortDirection === "asc" ? " ↑" : " ↓";
 }
 
 export function OrderTable({
-  sectionTitle,
   orders,
   paginatedOrders,
   sortedOrders,
@@ -103,12 +99,6 @@ export function OrderTable({
 }: Props) {
   return (
     <section className="table-stage">
-      <div className="table-toolbar">
-        <div>
-          <h3>{sectionTitle}</h3>
-        </div>
-      </div>
-
       <div className="queue-controls">
         <label className="field queue-search-field">
           <input
@@ -246,7 +236,7 @@ export function OrderTable({
                     onClick={() => onToggleSort("customer_name")}
                     type="button"
                   >
-                    Customer <span>{sortIndicator("customer_name", sortField, sortDirection)}</span>
+                    Customer <span className="sort-icon">{sortIndicator("customer_name", sortField, sortDirection)}</span>
                   </button>
                 </th>
                 <th>
@@ -255,7 +245,7 @@ export function OrderTable({
                     onClick={() => onToggleSort("status")}
                     type="button"
                   >
-                    Status <span>{sortIndicator("status", sortField, sortDirection)}</span>
+                    Status <span className="sort-icon">{sortIndicator("status", sortField, sortDirection)}</span>
                   </button>
                 </th>
                 <th>
@@ -264,7 +254,7 @@ export function OrderTable({
                     onClick={() => onToggleSort("updated_at")}
                     type="button"
                   >
-                    Updated <span>{sortIndicator("updated_at", sortField, sortDirection)}</span>
+                    Updated <span className="sort-icon">{sortIndicator("updated_at", sortField, sortDirection)}</span>
                   </button>
                 </th>
                 <th>Actions</th>
