@@ -493,6 +493,24 @@ export default function App() {
   const pendingMutationCount = pendingMutations.length;
   const selectedOrderIsQueuedDraft = selectedOrderId?.startsWith("queued-order-") ?? false;
 
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    if (isLoading || paginatedOrders.length === 0) {
+      return;
+    }
+
+    if (selectedOrderId && paginatedOrders.some((order) => order.id === selectedOrderId)) {
+      return;
+    }
+
+    setSelectedOrderId(paginatedOrders[0].id);
+  }, [isLoading, paginatedOrders, selectedOrderId]);
+
   function toggleSort(field: SortField) {
     if (sortField === field) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
