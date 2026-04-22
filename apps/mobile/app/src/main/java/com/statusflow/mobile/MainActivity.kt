@@ -126,6 +126,8 @@ internal enum class MobileOrderSortOption { UPDATED_DESC, UPDATED_ASC, TITLE_ASC
 
 private enum class MobileScreenMode { Queue, Detail, Create }
 
+internal enum class MobileDetailTab { Overview, History, Comments }
+
 object MobileUiTags {
     const val LOGIN_CARD = "login_card"
     const val LOGIN_EMAIL_INPUT = "login_email_input"
@@ -494,9 +496,11 @@ fun MobileHomeScreen(
     var description by remember { mutableStateOf("") }
     var commentBody by remember { mutableStateOf("") }
     var screenModeName by rememberSaveable { mutableStateOf(MobileScreenMode.Queue.name) }
+    var detailTabName by rememberSaveable { mutableStateOf(MobileDetailTab.Overview.name) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
     val screenMode = MobileScreenMode.valueOf(screenModeName)
+    val detailTab = MobileDetailTab.valueOf(detailTabName)
 
     // Auto-show detail when order is pre-selected via debug intent
     LaunchedEffect(state.selectedOrderDetail) {
@@ -626,8 +630,10 @@ fun MobileHomeScreen(
                                                     allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
                                                     isSubmitting = state.isSubmitting,
                                                     actionMessage = state.actionMessage,
+                                                    selectedTab = detailTab,
                                                     commentBody = commentBody,
                                                     onCommentBodyChange = { commentBody = it },
+                                                    onSelectTab = { detailTabName = it.name },
                                                     onTransitionOrder = onTransitionOrder,
                                                     onAddComment = { onAddComment(commentBody.trim()) },
                                                     onBack = { screenModeName = MobileScreenMode.Queue.name },
@@ -1508,8 +1514,10 @@ internal fun DetailScreenCard(
     allowedTransitions: List<String>,
     isSubmitting: Boolean,
     actionMessage: String?,
+    selectedTab: MobileDetailTab,
     commentBody: String,
     onCommentBodyChange: (String) -> Unit,
+    onSelectTab: (MobileDetailTab) -> Unit,
     onTransitionOrder: (String) -> Unit,
     onAddComment: () -> Unit,
     onBack: () -> Unit,
@@ -1569,90 +1577,168 @@ internal fun DetailScreenCard(
                             )
                         }
                     }
-                    Text(detail.description, style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                }
-            }
-
-            if (actionMessage != null) {
-                FeedbackCard(
-                    title = "Latest action",
-                    body = actionMessage,
-                    accent = Mint400,
-                    surface = Navy700,
-                    eyebrow = "ACTION"
-                )
-            }
-
-            DetailSectionCard(title = "Next steps", subtitle = "Move the order through the allowed lifecycle only.") {
-                if (!isOperator) {
-                    Text("Customer mode is read-only for status changes.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
-                } else if (allowedTransitions.isEmpty()) {
-                    Text("This order is already in a terminal state.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        allowedTransitions.forEach { status ->
+                    if (actionMessage != null) {
+                        FeedbackInline(label = actionMessage, accent = Mint400)
+                    }
+                    if (isOperator && allowedTransitions.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             Button(
                                 enabled = !isSubmitting,
-                                onClick = { onTransitionOrder(status) },
-                                shape = RoundedCornerShape(18.dp),
+                                onClick = { onTransitionOrder(allowedTransitions.first()) },
+                                shape = RoundedCornerShape(16.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Blue400,
                                     contentColor = Navy900,
                                     disabledContainerColor = Navy600,
                                     disabledContentColor = Slate300
                                 ),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Text(statusLabel(status))
+                                Text("Change status")
+                            }
+                            Button(
+                                onClick = { onSelectTab(MobileDetailTab.Comments) },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Add note")
                             }
                         }
                     }
                 }
             }
 
-            DetailSectionCard(title = "History", subtitle = "Most recent workflow events.") {
-                detail.history.takeLast(4).reversed().forEach { event ->
-                    TimelineEntry(event.summary, "${event.actorName} | ${event.changedAtLabel}", event.reason)
-                }
-            }
+            DetailTabRow(
+                selectedTab = selectedTab,
+                historyCount = detail.history.size,
+                commentCount = detail.comments.size,
+                onSelectTab = onSelectTab
+            )
 
-            DetailSectionCard(title = "Comments", subtitle = if (isOperator) "Leave a note for the next operator." else "Comments are available in operator mode.") {
-                if (isOperator) {
-                    Button(
-                        enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
-                        onClick = onAddComment,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Mint400,
-                            contentColor = Navy900,
-                            disabledContainerColor = Navy600,
-                            disabledContentColor = Slate300
-                        ),
-                        modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_SUBMIT)
-                    ) {
-                        Text(if (isSubmitting) "Sending..." else "Post comment")
+            when (selectedTab) {
+                MobileDetailTab.Overview -> DetailSectionCard(title = "Overview", subtitle = "The minimum useful context for this order.") {
+                    Text(detail.description, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                    if (!isOperator) {
+                        FeedbackInline(label = "Customer mode is read-only for status changes.", accent = Amber300)
+                    } else if (allowedTransitions.isEmpty()) {
+                        FeedbackInline(label = "This order is already in a terminal state.", accent = Mint400)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            allowedTransitions.forEach { status ->
+                                Button(
+                                    enabled = !isSubmitting,
+                                    onClick = { onTransitionOrder(status) },
+                                    shape = RoundedCornerShape(18.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Navy700,
+                                        contentColor = Slate100,
+                                        disabledContainerColor = Navy600,
+                                        disabledContentColor = Slate300
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Move to ${statusLabel(status)}")
+                                }
+                            }
+                        }
                     }
-                    OutlinedTextField(
-                        value = commentBody,
-                        onValueChange = onCommentBodyChange,
-                        label = { Text("Add operator note") },
-                        modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_INPUT).semantics {
-                            contentDescription = "Add operator note"
-                        },
-                        minLines = 2
-                    )
-                } else {
-                    FeedbackInline(label = "Sign in as an operator to leave queue notes", accent = Amber300)
                 }
-                if (detail.comments.isEmpty()) {
-                    Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
-                } else {
-                    detail.comments.reversed().forEach { comment ->
-                        TimelineEntry(comment.authorName, comment.createdAtLabel, comment.body)
+
+                MobileDetailTab.History -> DetailSectionCard(title = "History", subtitle = "Most recent workflow events.") {
+                    if (detail.history.isEmpty()) {
+                        Text("No history yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
+                    } else {
+                        detail.history.takeLast(8).reversed().forEach { event ->
+                            TimelineEntry(event.summary, "${event.actorName} | ${event.changedAtLabel}", event.reason)
+                        }
+                    }
+                }
+
+                MobileDetailTab.Comments -> DetailSectionCard(title = "Comments", subtitle = if (isOperator) "Leave a note for the next operator." else "Comments are available in operator mode.") {
+                    if (isOperator) {
+                        OutlinedTextField(
+                            value = commentBody,
+                            onValueChange = onCommentBodyChange,
+                            label = { Text("Add operator note") },
+                            modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_INPUT).semantics {
+                                contentDescription = "Add operator note"
+                            },
+                            minLines = 2
+                        )
+                        Button(
+                            enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
+                            onClick = onAddComment,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Mint400,
+                                contentColor = Navy900,
+                                disabledContainerColor = Navy600,
+                                disabledContentColor = Slate300
+                            ),
+                            modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_SUBMIT)
+                        ) {
+                            Text(if (isSubmitting) "Sending..." else "Post comment")
+                        }
+                    } else {
+                        FeedbackInline(label = "Sign in as an operator to leave queue notes", accent = Amber300)
+                    }
+                    if (detail.comments.isEmpty()) {
+                        Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
+                    } else {
+                        detail.comments.reversed().forEach { comment ->
+                            TimelineEntry(comment.authorName, comment.createdAtLabel, comment.body)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DetailTabRow(
+    selectedTab: MobileDetailTab,
+    historyCount: Int,
+    commentCount: Int,
+    onSelectTab: (MobileDetailTab) -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        DetailTabButton(
+            label = "Overview",
+            active = selectedTab == MobileDetailTab.Overview,
+            onClick = { onSelectTab(MobileDetailTab.Overview) },
+            modifier = Modifier.weight(1f)
+        )
+        DetailTabButton(
+            label = "History $historyCount",
+            active = selectedTab == MobileDetailTab.History,
+            onClick = { onSelectTab(MobileDetailTab.History) },
+            modifier = Modifier.weight(1f)
+        )
+        DetailTabButton(
+            label = "Comments $commentCount",
+            active = selectedTab == MobileDetailTab.Comments,
+            onClick = { onSelectTab(MobileDetailTab.Comments) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun DetailTabButton(label: String, active: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.semantics { stateDescription = if (active) "Selected" else "Not selected" },
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, if (active) Blue300.copy(alpha = 0.62f) else Slate300.copy(alpha = 0.18f)),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (active) Blue400.copy(alpha = 0.22f) else Navy700,
+            contentColor = if (active) Color.White else Slate200
+        ),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+    ) {
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
