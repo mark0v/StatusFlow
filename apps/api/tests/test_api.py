@@ -21,6 +21,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
 
     for module_name in [
         "app.main",
+        "app.auth",
         "app.seed",
         "app.services",
         "app.models",
