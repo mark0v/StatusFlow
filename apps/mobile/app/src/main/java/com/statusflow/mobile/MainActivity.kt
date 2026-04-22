@@ -496,9 +496,7 @@ fun MobileHomeScreen(
     var screenModeName by rememberSaveable { mutableStateOf(MobileScreenMode.Queue.name) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
-    var sortOptionName by rememberSaveable { mutableStateOf(MobileOrderSortOption.UPDATED_DESC.name) }
     val screenMode = MobileScreenMode.valueOf(screenModeName)
-    val sortOption = MobileOrderSortOption.valueOf(sortOptionName)
 
     // Auto-show detail when order is pre-selected via debug intent
     LaunchedEffect(state.selectedOrderDetail) {
@@ -507,9 +505,11 @@ fun MobileHomeScreen(
         }
     }
 
-    val availableStatuses = state.orders.map { it.rawStatus }.distinct()
+    val statusCounts = remember(state.orders) {
+        state.orders.groupingBy { it.rawStatus }.eachCount()
+    }
 
-    val visibleOrders = remember(state.orders, searchQuery, statusFilter, sortOption) {
+    val visibleOrders = remember(state.orders, searchQuery, statusFilter) {
         val normalizedQuery = searchQuery.trim().lowercase()
         state.orders
             .filter { statusFilter == null || it.rawStatus == statusFilter }
@@ -518,14 +518,6 @@ fun MobileHomeScreen(
                     order.code.lowercase().contains(normalizedQuery) ||
                     order.title.lowercase().contains(normalizedQuery) ||
                     order.customerName.lowercase().contains(normalizedQuery)
-            }
-            .let { orders ->
-                when (sortOption) {
-                    MobileOrderSortOption.UPDATED_DESC -> orders
-                    MobileOrderSortOption.UPDATED_ASC -> orders.reversed()
-                    MobileOrderSortOption.TITLE_ASC -> orders.sortedBy { it.title.lowercase() }
-                    MobileOrderSortOption.STATUS_ASC -> orders.sortedWith(compareBy<MobileOrderSummary> { statusLabel(it.rawStatus) }.thenBy { it.title.lowercase() })
-                }
             }
     }
 
@@ -576,33 +568,6 @@ fun MobileHomeScreen(
                                 syncState = state.syncState,
                                 onRefresh = onRefresh,
                                 onSignOut = onSignOut
-                            )
-                        }
-                        item {
-                        QueueOverviewCard(
-                            totalOrders = state.orders.size,
-                            visibleOrders = visibleOrders.size,
-                            selectedOrderCode = state.selectedOrderDetail?.code,
-                            activeFilterLabel = statusFilter?.let(::statusLabel),
-                            syncState = state.syncState
-                        )
-                    }
-                        item {
-                            ListControlsCard(
-                                searchQuery = searchQuery,
-                                selectedStatus = statusFilter,
-                                availableStatuses = availableStatuses,
-                                sortOption = sortOption,
-                                onSearchQueryChange = { searchQuery = it },
-                                onSelectStatus = { selected -> statusFilter = if (statusFilter == selected) null else selected },
-                                onToggleSort = {
-                                    sortOptionName = when (sortOption) {
-                                        MobileOrderSortOption.UPDATED_DESC -> MobileOrderSortOption.UPDATED_ASC
-                                        MobileOrderSortOption.UPDATED_ASC -> MobileOrderSortOption.TITLE_ASC
-                                        MobileOrderSortOption.TITLE_ASC -> MobileOrderSortOption.STATUS_ASC
-                                        MobileOrderSortOption.STATUS_ASC -> MobileOrderSortOption.UPDATED_DESC
-                                    }.name
-                                }
                             )
                         }
                         if (state.actionMessage != null) {
@@ -714,6 +679,21 @@ fun MobileHomeScreen(
 
                                     MobileScreenMode.Queue -> {
                                         item {
+                                            StatusCounterCarousel(
+                                                totalOrders = state.orders.size,
+                                                statusCounts = statusCounts,
+                                                selectedStatus = statusFilter,
+                                                onSelectStatus = { selected -> statusFilter = selected }
+                                            )
+                                        }
+                                        item {
+                                            QueueToolbar(
+                                                searchQuery = searchQuery,
+                                                onSearchQueryChange = { searchQuery = it },
+                                                onCreate = { screenModeName = MobileScreenMode.Create.name }
+                                            )
+                                        }
+                                        item {
                                             QueueSectionHeader(
                                                 title = "Active queue",
                                                 subtitle = "Tap a card to select it, then open details when you are ready."
@@ -751,28 +731,6 @@ fun MobileHomeScreen(
                                         }
                                     }
                                 }
-                            }
-                        }
-                        if (screenMode == MobileScreenMode.Queue) {
-                            item {
-                                CreateOrderCard(
-                                    title = title,
-                                    description = description,
-                                    isExpanded = false,
-                                    isSubmitting = state.isSubmitting,
-                                    isLoading = state.isLoading || state.isRefreshing,
-                                    isEnabled = state.canCreateOrders,
-                                    helperText = if (state.isOperator) {
-                                        "Operator mode can still capture new work into the shared queue."
-                                    } else {
-                                        "Customer mode submits directly into the same shared queue."
-                                    },
-                                    onTitleChange = { title = it },
-                                    onDescriptionChange = { description = it },
-                                    onCreate = {},
-                                    onRefresh = onRefresh,
-                                    onToggleExpanded = { screenModeName = MobileScreenMode.Create.name }
-                                )
                             }
                         }
                         item { ApiCard(state.apiBaseUrl) }
@@ -1142,6 +1100,96 @@ internal fun QueueOverviewCard(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun StatusCounterCarousel(
+    totalOrders: Int,
+    statusCounts: Map<String, Int>,
+    selectedStatus: String?,
+    onSelectStatus: (String?) -> Unit
+) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 4.dp)) {
+        item {
+            StatusCounterCard(
+                label = "Total",
+                count = totalOrders,
+                active = selectedStatus == null,
+                accent = Blue400,
+                onClick = { onSelectStatus(null) }
+            )
+        }
+        items(mobileStatusOrder) { status ->
+            StatusCounterCard(
+                label = statusLabel(status),
+                count = statusCounts[status] ?: 0,
+                active = selectedStatus == status,
+                accent = statusAccent(status),
+                onClick = { onSelectStatus(status) },
+                modifier = Modifier.testTag(MobileUiTags.statusChip(status))
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusCounterCard(
+    label: String,
+    count: Int,
+    active: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .size(width = 112.dp, height = 64.dp)
+            .clickable { onClick() }
+            .semantics {
+                role = Role.Button
+                stateDescription = if (active) "Selected" else "Not selected"
+            },
+        colors = CardDefaults.cardColors(containerColor = if (active) Navy500 else Navy700.copy(alpha = 0.82f)),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, if (active) Blue300.copy(alpha = 0.72f) else Slate300.copy(alpha = 0.18f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Slate300, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(count.toString(), style = MaterialTheme.typography.titleLarge, color = accent, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+internal fun QueueToolbar(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onCreate: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            label = { Text("Search code, title, or customer") },
+            modifier = Modifier.weight(1f).testTag(MobileUiTags.SEARCH_INPUT),
+            singleLine = true
+        )
+        Button(
+            onClick = onCreate,
+            shape = RoundedCornerShape(18.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Blue400, contentColor = Navy900),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            Text("Create", fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -1971,6 +2019,17 @@ private fun StatusBadge(label: String, accent: Color) {
 
 private fun statusLabel(status: String): String = status.split("_").joinToString(" ") {
     it.replaceFirstChar { character -> character.uppercase() }
+}
+
+private val mobileStatusOrder = listOf("new", "in_review", "approved", "rejected", "fulfilled", "cancelled")
+
+private fun statusAccent(status: String): Color = when (status) {
+    "new" -> Blue400
+    "in_review" -> Amber300
+    "approved", "fulfilled" -> Mint400
+    "rejected" -> Red300
+    "cancelled" -> Slate300
+    else -> Slate100
 }
 
 private fun compactTimestampLabel(label: String): String {
