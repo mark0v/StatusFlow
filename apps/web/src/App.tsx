@@ -88,7 +88,6 @@ export default function App() {
   const [sortField, setSortField] = useState<SortField>("updated_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [statusFilter, setStatusFilter] = useState<OrderStatus[]>([]);
-  const [isStatusFilterOpen, setIsStatusFilterOpen] = useState(false);
   const [openActionsOrderId, setOpenActionsOrderId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<OrderDetail | null>(null);
@@ -450,10 +449,6 @@ export default function App() {
         return;
       }
 
-      if (!target.closest(".column-filter-wrap")) {
-        setIsStatusFilterOpen(false);
-      }
-
       if (!target.closest(".row-action-menu")) {
         setOpenActionsOrderId(null);
       }
@@ -475,11 +470,8 @@ export default function App() {
   );
   const isOperator = session?.user.role === "operator";
   const consoleTitle = isOperator
-    ? "Today's queue"
-    : "My requests";
-  const queueSectionTitle = isOperator
-    ? "Keep requests moving"
-    : "Track status and updates";
+    ? "Active orders"
+    : "My orders";
   const currentCustomer = useMemo(() => resolveCurrentCustomer(users, session), [session, users]);
   const recoveryCandidateOrder = useMemo(
     () => resolveRecoveryCandidateOrder(orders, selectedOrderId),
@@ -501,6 +493,24 @@ export default function App() {
   const pendingMutationCount = pendingMutations.length;
   const selectedOrderIsQueuedDraft = selectedOrderId?.startsWith("queued-order-") ?? false;
 
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    if (isLoading || paginatedOrders.length === 0) {
+      return;
+    }
+
+    if (selectedOrderId && paginatedOrders.some((order) => order.id === selectedOrderId)) {
+      return;
+    }
+
+    setSelectedOrderId(paginatedOrders[0].id);
+  }, [isLoading, paginatedOrders, selectedOrderId]);
+
   function toggleSort(field: SortField) {
     if (sortField === field) {
       setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
@@ -511,12 +521,8 @@ export default function App() {
     setPage(1);
   }
 
-  function toggleStatusFilter(status: OrderStatus) {
-    setStatusFilter((current) =>
-      current.includes(status)
-        ? current.filter((entry) => entry !== status)
-        : [...current, status]
-    );
+  function selectStatusFilter(status: OrderStatus | null) {
+    setStatusFilter(status ? [status] : []);
     setPage(1);
   }
 
@@ -979,78 +985,78 @@ export default function App() {
           userRole={session.user.role}
         />
 
+        <div className="console-heading">
+          <h1>{consoleTitle}</h1>
+        </div>
+
         <section className="panel panel-console">
-          <div className="panel-header">
-            <div>
-              <h2>{consoleTitle}</h2>
-            </div>
+          <StatusSummary
+            activeStatusFilter={statusFilter.length === 1 ? statusFilter[0] : null}
+            groupedStatuses={groupedStatuses}
+            totalCount={orders.length}
+            onStatusFilterChange={selectStatusFilter}
+          />
+
+          <div className="console-grid">
+            <OrderTable
+              orders={orders}
+              paginatedOrders={paginatedOrders}
+              sortedOrders={sortedOrders}
+              isLoading={isLoading}
+              isRefreshing={isRefreshing}
+              isSubmitting={isSubmitting}
+              isOperator={isOperator}
+              isCreateOpen={isCreateOpen}
+              searchQuery={searchQuery}
+              page={page}
+              pageSize={pageSize}
+              totalPages={totalPages}
+              actionError={actionError}
+              currentCustomer={currentCustomer}
+              selectedOrderId={selectedOrderId}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              syncSource={syncSource}
+              syncNotice={syncNotice}
+              lastRefreshedAt={lastRefreshedAt}
+              pendingMutationCount={pendingMutationCount}
+              queueNotice={queueNotice}
+              queueError={queueError}
+              error={error}
+              formState={formState}
+              onSearchChange={setSearchQuery}
+              onRefresh={handleRefresh}
+              onToggleCreateOpen={() => setIsCreateOpen((current) => !current)}
+              onCreateOrder={handleCreateOrder}
+              onFormTitleChange={(title) => setFormState((current) => ({ ...current, title }))}
+              onFormDescriptionChange={(description) => setFormState((current) => ({ ...current, description }))}
+              onToggleSort={toggleSort}
+              onSelectOrder={setSelectedOrderId}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+
+            <OrderInspector
+              selectedOrderDetail={selectedOrderDetail}
+              detailError={detailError}
+              isDetailLoading={isDetailLoading}
+              isRefreshing={isRefreshing}
+              isSubmitting={isSubmitting}
+              isOperator={isOperator}
+              lifecycle={lifecycle}
+              openActionsOrderId={openActionsOrderId}
+              selectedOrderIsQueuedDraft={selectedOrderIsQueuedDraft}
+              commentDraft={commentDraft}
+              recoveryCandidateOrder={recoveryCandidateOrder}
+              onRefresh={handleRefresh}
+              onClearSelection={handleClearSelection}
+              onRecoverSelection={handleRecoverSelection}
+              onToggleActionsOrderId={setOpenActionsOrderId}
+              onTransition={handleTransition}
+              onCommentDraftChange={setCommentDraft}
+              onAddComment={handleAddComment}
+            />
           </div>
-
-          <StatusSummary groupedStatuses={groupedStatuses} />
-
-          <OrderTable
-            sectionTitle={queueSectionTitle}
-            orders={orders}
-            paginatedOrders={paginatedOrders}
-            sortedOrders={sortedOrders}
-            lifecycle={lifecycle}
-            isLoading={isLoading}
-            isRefreshing={isRefreshing}
-            isSubmitting={isSubmitting}
-            isOperator={isOperator}
-            isCreateOpen={isCreateOpen}
-            searchQuery={searchQuery}
-            statusFilter={statusFilter}
-            isStatusFilterOpen={isStatusFilterOpen}
-            page={page}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            actionError={actionError}
-            currentCustomer={currentCustomer}
-            selectedOrderId={selectedOrderId}
-            openActionsOrderId={openActionsOrderId}
-            sortField={sortField}
-            sortDirection={sortDirection}
-            syncSource={syncSource}
-            syncNotice={syncNotice}
-            pendingMutationCount={pendingMutationCount}
-            queueNotice={queueNotice}
-            queueError={queueError}
-            error={error}
-            formState={formState}
-            onSearchChange={setSearchQuery}
-            onRefresh={handleRefresh}
-            onToggleCreateOpen={() => setIsCreateOpen((current) => !current)}
-            onCreateOrder={handleCreateOrder}
-            onFormTitleChange={(title) => setFormState((current) => ({ ...current, title }))}
-            onFormDescriptionChange={(description) => setFormState((current) => ({ ...current, description }))}
-            onToggleSort={toggleSort}
-            onToggleStatusFilter={toggleStatusFilter}
-            onToggleStatusFilterOpen={() => setIsStatusFilterOpen((current) => !current)}
-            onSelectOrder={setSelectedOrderId}
-            onToggleActionsOrderId={setOpenActionsOrderId}
-            onTransition={handleTransition}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
-
-          <OrderInspector
-            selectedOrderDetail={selectedOrderDetail}
-            detailError={detailError}
-            isDetailLoading={isDetailLoading}
-            isRefreshing={isRefreshing}
-            isSubmitting={isSubmitting}
-            isOperator={isOperator}
-            selectedOrderId={selectedOrderId}
-            selectedOrderIsQueuedDraft={selectedOrderIsQueuedDraft}
-            commentDraft={commentDraft}
-            recoveryCandidateOrder={recoveryCandidateOrder}
-            onRefresh={handleRefresh}
-            onClearSelection={handleClearSelection}
-            onRecoverSelection={handleRecoverSelection}
-            onCommentDraftChange={setCommentDraft}
-            onAddComment={handleAddComment}
-          />
         </section>
       </main>
     </ErrorBoundary>

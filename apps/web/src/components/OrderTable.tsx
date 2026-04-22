@@ -1,42 +1,33 @@
 import {
   formatTimestamp,
-  historySummary,
-  orderedStatuses,
   statusLabels,
   statusTone,
   type OrderCard,
-  type OrderDetail,
-  type OrderStatus,
-  type OrderStatusLifecycle,
   type SortDirection,
   type SortField
 } from "../data/webTypes";
 
 interface Props {
-  sectionTitle: string;
   orders: OrderCard[];
   paginatedOrders: OrderCard[];
   sortedOrders: OrderCard[];
-  lifecycle: OrderStatusLifecycle | null;
   isLoading: boolean;
   isRefreshing: boolean;
   isSubmitting: boolean;
   isOperator: boolean;
   isCreateOpen: boolean;
   searchQuery: string;
-  statusFilter: OrderStatus[];
-  isStatusFilterOpen: boolean;
   page: number;
   pageSize: number;
   totalPages: number;
   actionError: string | null;
   currentCustomer: { id: string; name: string } | null;
   selectedOrderId: string | null;
-  openActionsOrderId: string | null;
   sortField: SortField;
   sortDirection: SortDirection;
   syncSource: "live" | "cached";
   syncNotice: string | null;
+  lastRefreshedAt: string | null;
   pendingMutationCount: number;
   queueNotice: string | null;
   queueError: string | null;
@@ -49,47 +40,54 @@ interface Props {
   onFormTitleChange: (title: string) => void;
   onFormDescriptionChange: (description: string) => void;
   onToggleSort: (field: SortField) => void;
-  onToggleStatusFilter: (status: OrderStatus) => void;
-  onToggleStatusFilterOpen: () => void;
   onSelectOrder: (orderId: string) => void;
-  onToggleActionsOrderId: (orderId: string | null) => void;
-  onTransition: (orderId: string, toStatus: OrderStatus) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
 }
 
 function sortIndicator(field: SortField, sortField: SortField, sortDirection: SortDirection) {
   if (sortField !== field) {
-    return "";
+    return "↕";
   }
   return sortDirection === "asc" ? " ↑" : " ↓";
 }
 
+function formatSyncLabel(lastRefreshedAt: string | null, isRefreshing: boolean) {
+  if (isRefreshing) {
+    return "Syncing";
+  }
+
+  if (!lastRefreshedAt) {
+    return "Sync pending";
+  }
+
+  return `Sync ${new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(lastRefreshedAt))}`;
+}
+
 export function OrderTable({
-  sectionTitle,
   orders,
   paginatedOrders,
   sortedOrders,
-  lifecycle,
   isLoading,
   isRefreshing,
   isSubmitting,
   isOperator,
   isCreateOpen,
   searchQuery,
-  statusFilter,
-  isStatusFilterOpen,
   page,
   pageSize,
   totalPages,
   actionError,
   currentCustomer,
   selectedOrderId,
-  openActionsOrderId,
   sortField,
   sortDirection,
   syncSource,
   syncNotice,
+  lastRefreshedAt,
   pendingMutationCount,
   queueNotice,
   queueError,
@@ -102,41 +100,40 @@ export function OrderTable({
   onFormTitleChange,
   onFormDescriptionChange,
   onToggleSort,
-  onToggleStatusFilter,
-  onToggleStatusFilterOpen,
   onSelectOrder,
-  onToggleActionsOrderId,
-  onTransition,
   onPageChange,
   onPageSizeChange
 }: Props) {
+  const visibleColumnCount = isOperator ? 4 : 3;
+  const searchPlaceholder = isOperator
+    ? "Search code, title, or customer"
+    : "Search code or title";
+
   return (
     <section className="table-stage">
-      <div className="table-toolbar">
-        <div>
-          <h3>{sectionTitle}</h3>
-        </div>
-      </div>
-
       <div className="queue-controls">
         <label className="field queue-search-field">
           <input
             aria-label="Search queue"
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search code, title, or customer"
+            placeholder={searchPlaceholder}
             value={searchQuery}
           />
         </label>
 
         <div className="toolbar-actions">
-          <button
-            className="secondary-action"
-            disabled={isLoading || isRefreshing}
-            onClick={() => void onRefresh()}
-            type="button"
-          >
-            {isRefreshing ? "Refreshing..." : "Refresh"}
-          </button>
+          <div className={`sync-pill ${syncSource === "cached" ? "cached" : ""}`}>
+            <button
+              aria-label="Refresh orders"
+              className="refresh-icon-button"
+              disabled={isLoading || isRefreshing}
+              onClick={() => void onRefresh()}
+              type="button"
+            >
+              ↻
+            </button>
+            <span>{formatSyncLabel(lastRefreshedAt, isRefreshing)}</span>
+          </div>
           <button
             className="primary-action"
             onClick={onToggleCreateOpen}
@@ -152,7 +149,7 @@ export function OrderTable({
           <div className="section-heading">
             <div>
               <p className="eyebrow">Create order</p>
-              <h3>Add a new order to the live queue</h3>
+              <h3>{isOperator ? "Add a new order to the live queue" : "Create a new request"}</h3>
             </div>
           </div>
 
@@ -173,7 +170,9 @@ export function OrderTable({
               <textarea
                 value={formState.description}
                 onChange={(event) => onFormDescriptionChange(event.target.value)}
-                placeholder="Add context that web and mobile operators should both see."
+                placeholder={isOperator
+                  ? "Add context that web and mobile operators should both see."
+                  : "Tell us what happened and what you need help with."}
                 rows={3}
               />
             </label>
@@ -238,57 +237,33 @@ export function OrderTable({
           <div className="table-wrap">
             <table className="orders-table">
             <colgroup>
-              <col className="col-code" />
-              <col className="col-title" />
-              <col className="col-customer" />
+              <col className="col-order" />
+              {isOperator ? <col className="col-customer" /> : null}
               <col className="col-status" />
               <col className="col-updated" />
-              <col className="col-actions" />
             </colgroup>
             <thead>
               <tr>
-                <th>Code</th>
-                <th>Title</th>
+                <th>Order <span className="sort-icon sort-icon-static">↕</span></th>
+                {isOperator ? (
+                  <th>
+                    <button
+                      className="column-sort"
+                      onClick={() => onToggleSort("customer_name")}
+                      type="button"
+                    >
+                      Customer <span className="sort-icon">{sortIndicator("customer_name", sortField, sortDirection)}</span>
+                    </button>
+                  </th>
+                ) : null}
                 <th>
                   <button
                     className="column-sort"
-                    onClick={() => onToggleSort("customer_name")}
+                    onClick={() => onToggleSort("status")}
                     type="button"
                   >
-                    Customer <span>{sortIndicator("customer_name", sortField, sortDirection)}</span>
+                    Status <span className="sort-icon">{sortIndicator("status", sortField, sortDirection)}</span>
                   </button>
-                </th>
-                <th>
-                  <div className="column-filter-wrap">
-                    <button
-                      className="column-sort"
-                      onClick={() => onToggleSort("status")}
-                      type="button"
-                    >
-                      Status <span>{sortIndicator("status", sortField, sortDirection)}</span>
-                    </button>
-                    <button
-                      className={`filter-trigger ${statusFilter.length > 0 ? "active" : ""}`}
-                      onClick={onToggleStatusFilterOpen}
-                      type="button"
-                    >
-                      Filter
-                    </button>
-                    {isStatusFilterOpen ? (
-                      <div className="filter-menu">
-                        {orderedStatuses.map((status) => (
-                          <label className="filter-option" key={status}>
-                            <input
-                              checked={statusFilter.includes(status)}
-                              onChange={() => onToggleStatusFilter(status)}
-                              type="checkbox"
-                            />
-                            <span>{statusLabels[status]}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
                 </th>
                 <th>
                   <button
@@ -296,85 +271,40 @@ export function OrderTable({
                     onClick={() => onToggleSort("updated_at")}
                     type="button"
                   >
-                    Updated <span>{sortIndicator("updated_at", sortField, sortDirection)}</span>
+                    Updated <span className="sort-icon">{sortIndicator("updated_at", sortField, sortDirection)}</span>
                   </button>
                 </th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {paginatedOrders.length === 0 ? (
                 <tr>
-                  <td className="empty-row" colSpan={6}>
+                  <td className="empty-row" colSpan={visibleColumnCount}>
                     <span className="empty-row-eyebrow">No matching orders</span>
                     <strong>Nothing matches the current queue controls.</strong>
                     <p>Clear the search or active status filters to bring orders back into view.</p>
                   </td>
                 </tr>
               ) : (
-                paginatedOrders.map((order) => {
-                  const nextStatuses = lifecycle?.allowed_transitions[order.status] ?? [];
-
-                  return (
-                    <tr
-                      className={selectedOrderId === order.id ? "is-selected" : ""}
-                      key={order.id}
-                      onClick={() => onSelectOrder(order.id)}
-                    >
-                      <td className="cell-code">{order.code}</td>
-                      <td className="cell-title">{order.title}</td>
-                      <td className="cell-customer">{order.customer_name}</td>
-                      <td>
-                        <span className={`pill ${statusTone(order.status)}`}>
-                          {statusLabels[order.status]}
-                        </span>
-                      </td>
-                      <td className="cell-updated">{formatTimestamp(order.updated_at)}</td>
-                      <td className="cell-actions">
-                        <div className="table-actions">
-                          {nextStatuses.length === 0 ? (
-                            <span className="transition-terminal">Terminal state</span>
-                          ) : order.id.startsWith("queued-order-") ? (
-                            <span className="transition-terminal">Queued offline</span>
-                          ) : !isOperator ? (
-                            <span className="transition-terminal">Operator only</span>
-                          ) : (
-                            <div className="row-action-menu">
-                              <button
-                                className="transition-button transition-trigger"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onToggleActionsOrderId(openActionsOrderId === order.id ? null : order.id);
-                                }}
-                                type="button"
-                              >
-                                Change status
-                              </button>
-                              {openActionsOrderId === order.id ? (
-                                <div className="row-dropdown">
-                                  {nextStatuses.map((status) => (
-                                    <button
-                                      key={status}
-                                      className="dropdown-action"
-                                      disabled={isSubmitting}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        void onTransition(order.id, status);
-                                      }}
-                                      type="button"
-                                    >
-                                      {statusLabels[status]}
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                paginatedOrders.map((order) => (
+                  <tr
+                    className={selectedOrderId === order.id ? "is-selected" : ""}
+                    key={order.id}
+                    onClick={() => onSelectOrder(order.id)}
+                  >
+                    <td className="cell-order">
+                      <span className="cell-code">{order.code}</span>
+                      <span className="cell-title">{order.title}</span>
+                    </td>
+                    {isOperator ? <td className="cell-customer">{order.customer_name}</td> : null}
+                    <td>
+                      <span className={`pill ${statusTone(order.status)}`}>
+                        {statusLabels[order.status]}
+                      </span>
+                    </td>
+                    <td className="cell-updated">{formatTimestamp(order.updated_at)}</td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
@@ -383,12 +313,8 @@ export function OrderTable({
         {sortedOrders.length > 0 ? (
           <div className="pagination-bar">
             <div className="pagination-info">
-              <span>
-                Showing {(page - 1) * pageSize + 1}–
-                {Math.min(page * pageSize, sortedOrders.length)} of {sortedOrders.length} orders
-              </span>
               <label className="page-size-selector">
-                <span>Per page:</span>
+                <span>Rows per page</span>
                 <select
                   value={pageSize}
                   onChange={(event) => {
@@ -403,6 +329,10 @@ export function OrderTable({
                   ))}
                 </select>
               </label>
+              <span>
+                Showing {(page - 1) * pageSize + 1}–
+                {Math.min(page * pageSize, sortedOrders.length)} of {sortedOrders.length} orders
+              </span>
             </div>
             {totalPages > 1 ? (
               <div className="pagination-controls">
