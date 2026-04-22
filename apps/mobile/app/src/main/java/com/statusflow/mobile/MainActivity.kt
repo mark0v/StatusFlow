@@ -525,10 +525,6 @@ fun MobileHomeScreen(
             }
     }
 
-    val selectedOrderSummary = state.selectedOrderId?.let { selectedId ->
-        state.orders.firstOrNull { it.id == selectedId }
-    }
-
     Scaffold { padding ->
         Box(
             modifier = Modifier.fillMaxSize()
@@ -569,8 +565,12 @@ fun MobileHomeScreen(
                         item {
                             MobileAppHeader(
                                 session = state.session,
-                                syncState = state.syncState,
-                                onRefresh = onRefresh,
+                                actionLabel = when (screenMode) {
+                                    MobileScreenMode.Detail, MobileScreenMode.Profile -> "Back"
+                                    MobileScreenMode.Create -> "Cancel"
+                                    MobileScreenMode.Queue -> null
+                                },
+                                onAction = { screenModeName = MobileScreenMode.Queue.name },
                                 onProfile = { screenModeName = MobileScreenMode.Profile.name }
                             )
                         }
@@ -625,7 +625,6 @@ fun MobileHomeScreen(
                                                     onSelectTab = { detailTabName = it.name },
                                                     onTransitionOrder = onTransitionOrder,
                                                     onAddComment = { onAddComment(commentBody.trim()) },
-                                                    onBack = { screenModeName = MobileScreenMode.Queue.name },
                                                     isOperator = state.isOperator
                                                 )
                                             } else {
@@ -664,7 +663,6 @@ fun MobileHomeScreen(
                                             ProfileScreen(
                                                 session = state.session,
                                                 apiBaseUrl = state.apiBaseUrl,
-                                                onBack = { screenModeName = MobileScreenMode.Queue.name },
                                                 onSignOut = onSignOut
                                             )
                                         }
@@ -704,24 +702,16 @@ fun MobileHomeScreen(
                                                 OrderCard(
                                                     order = item,
                                                     isSelected = state.selectedOrderId == item.id,
-                                                    onSelectOrder = onSelectOrder
-                                                )
-                                            }
-                                        }
-                                        if (selectedOrderSummary != null) {
-                                            item {
-                                                SelectedOrderTray(
-                                                    order = selectedOrderSummary,
-                                                    onOpen = { screenModeName = MobileScreenMode.Detail.name }
+                                                    onSelectOrder = { orderId ->
+                                                        onSelectOrder(orderId)
+                                                        screenModeName = MobileScreenMode.Detail.name
+                                                    }
                                                 )
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                        if (screenMode == MobileScreenMode.Queue) {
-                            item { ApiCard(state.apiBaseUrl) }
                         }
                     }
                 }
@@ -799,8 +789,8 @@ internal fun ScreenTitle(session: MobileSessionSummary? = null, onSignOut: (() -
 @Composable
 internal fun MobileAppHeader(
     session: MobileSessionSummary?,
-    syncState: MobileSyncState,
-    onRefresh: () -> Unit,
+    actionLabel: String?,
+    onAction: () -> Unit,
     onProfile: () -> Unit
 ) {
     Row(
@@ -841,6 +831,7 @@ internal fun MobileAppHeader(
                 )
             }
         }
+        /*
         Button(
             onClick = onRefresh,
             modifier = Modifier.size(width = 92.dp, height = 42.dp),
@@ -855,6 +846,25 @@ internal fun MobileAppHeader(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+        */
+        if (actionLabel != null) {
+            Button(
+                onClick = onAction,
+                modifier = Modifier.size(width = 74.dp, height = 42.dp),
+                shape = RoundedCornerShape(999.dp),
+                border = BorderStroke(1.dp, Slate300.copy(alpha = 0.42f)),
+                colors = ButtonDefaults.buttonColors(containerColor = Navy700.copy(alpha = 0.2f), contentColor = Slate100),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    actionLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         Button(
             onClick = onProfile,
@@ -896,19 +906,10 @@ private fun SessionIdentityCard(session: MobileSessionSummary, onSignOut: () -> 
 private fun ProfileScreen(
     session: MobileSessionSummary?,
     apiBaseUrl: String,
-    onBack: () -> Unit,
     onSignOut: () -> Unit
 ) {
     ShellCard {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(
-                onClick = onBack,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-            ) {
-                Text("Back to queue")
-            }
             SectionLabel(
                 title = "Profile",
                 subtitle = "Account and workspace connection for this device."
@@ -1645,7 +1646,6 @@ internal fun DetailScreenCard(
     onSelectTab: (MobileDetailTab) -> Unit,
     onTransitionOrder: (String) -> Unit,
     onAddComment: () -> Unit,
-    onBack: () -> Unit,
     isOperator: Boolean
 ) {
     BoxWithConstraints {
@@ -1658,14 +1658,6 @@ internal fun DetailScreenCard(
                 border = BorderStroke(1.dp, Blue300.copy(alpha = 0.28f))
             ) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onBack,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Text("Back to queue")
-                    }
                     Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
                     Text(
                         detail.title,
@@ -2062,9 +2054,6 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
                             modifier = Modifier.weight(1f)
                         )
                     }
-                }
-                if (isSelected) {
-                    FeedbackInline(label = "Selected", accent = Mint400)
                 }
             }
         }

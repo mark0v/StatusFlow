@@ -124,7 +124,6 @@ class MobileHomeScreenTest {
                     onSelectTab = {},
                     onTransitionOrder = { transitionedStatus = it },
                     onAddComment = {},
-                    onBack = {},
                     isOperator = true
                 )
             }
