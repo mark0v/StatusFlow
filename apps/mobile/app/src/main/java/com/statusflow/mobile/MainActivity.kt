@@ -385,9 +385,7 @@ class MobileHomeViewModel(
             state = state,
             selectedOrderId = selectedOrderId,
             action = { repository.addComment(selectedOrderId, operator.id, body) },
-            successMessage = { _, queuedOffline ->
-                if (queuedOffline) "Comment saved locally and queued for sync." else "Comment added successfully."
-            }
+            successMessage = { _, _ -> null }
         )
     }
 
@@ -395,7 +393,7 @@ class MobileHomeViewModel(
         state: MobileHomeUiState,
         selectedOrderId: String,
         action: suspend () -> com.statusflow.mobile.data.MobileMutationResult,
-        successMessage: (MobileOrderDetail, Boolean) -> String
+        successMessage: (MobileOrderDetail, Boolean) -> String?
     ) {
         viewModelScope.launch {
             _uiState.value = state.copy(isSubmitting = true, actionMessage = null, errorMessage = null)
@@ -622,13 +620,19 @@ fun MobileHomeScreen(
                                                     isSubmitting = state.isSubmitting,
                                                     actionMessage = state.actionMessage,
                                                     selectedTab = detailTab,
-                                                    commentBody = commentBody,
-                                                    onCommentBodyChange = { commentBody = it },
-                                                    onSelectTab = { detailTabName = it.name },
-                                                    onTransitionOrder = onTransitionOrder,
-                                                    onAddComment = { onAddComment(commentBody.trim()) },
-                                                    isOperator = state.isOperator
-                                                )
+                                                   commentBody = commentBody,
+                                                   onCommentBodyChange = { commentBody = it },
+                                                   onSelectTab = { detailTabName = it.name },
+                                                   onTransitionOrder = onTransitionOrder,
+                                                   onAddComment = {
+                                                       val submittedComment = commentBody.trim()
+                                                       if (submittedComment.isNotEmpty()) {
+                                                           onAddComment(submittedComment)
+                                                           commentBody = ""
+                                                       }
+                                                   },
+                                                   isOperator = state.isOperator
+                                               )
                                             } else {
                                                 DetailUnavailableCard(
                                                     errorMessage = state.errorMessage,
@@ -1727,11 +1731,13 @@ internal fun DetailScreenCard(
                             DropdownMenu(
                                 expanded = statusMenuExpanded,
                                 onDismissRequest = { statusMenuExpanded = false },
-                                containerColor = Navy700
+                                containerColor = Navy900,
+                                tonalElevation = 8.dp,
+                                shadowElevation = 12.dp
                             ) {
                                 allowedTransitions.forEach { status ->
                                     DropdownMenuItem(
-                                        text = { Text("Move to ${statusLabel(status)}", color = Slate100) },
+                                        text = { Text(statusLabel(status), color = Color.White, fontWeight = FontWeight.SemiBold) },
                                         onClick = {
                                             statusMenuExpanded = false
                                             onTransitionOrder(status)
