@@ -562,8 +562,8 @@ fun MobileHomeScreen(
             } else {
                 PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize().testTag(MobileUiTags.SCROLL_CONTENT).padding(horizontal = 20.dp, vertical = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                        modifier = Modifier.fillMaxSize().testTag(MobileUiTags.SCROLL_CONTENT).padding(horizontal = 20.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(bottom = 24.dp)
                     ) {
                         item {
@@ -613,17 +613,6 @@ fun MobileHomeScreen(
                                 when (screenMode) {
                                     MobileScreenMode.Detail -> {
                                         item {
-                                            QueueSectionHeader(
-                                                title = if (state.selectedOrderDetail != null) "Selected order" else "Order detail",
-                                                subtitle = if (state.selectedOrderDetail != null) {
-                                                    if (state.isOperator) "Review details, update status, and leave context for the next operator."
-                                                    else "Review the order timeline and track the latest status from your phone."
-                                                } else {
-                                                    "Recover gracefully when a selected order is temporarily unavailable."
-                                                }
-                                            )
-                                        }
-                                        item {
                                             if (state.selectedOrderDetail != null) {
                                                 DetailScreenCard(
                                                     detail = state.selectedOrderDetail,
@@ -650,12 +639,6 @@ fun MobileHomeScreen(
                                     }
 
                                     MobileScreenMode.Create -> {
-                                        item {
-                                            QueueSectionHeader(
-                                                title = "New order",
-                                                subtitle = "Capture the work item, then return to the queue."
-                                            )
-                                        }
                                         item {
                                             CreateOrderScreen(
                                                 title = title,
@@ -692,12 +675,6 @@ fun MobileHomeScreen(
                                                 onCreate = { screenModeName = MobileScreenMode.Create.name }
                                             )
                                         }
-                                        item {
-                                            QueueSectionHeader(
-                                                title = "Active queue",
-                                                subtitle = "Tap a card to select it, then open details when you are ready."
-                                            )
-                                        }
                                         if (visibleOrders.isEmpty()) {
                                             item {
                                                 EmptyQueueCard(
@@ -732,7 +709,9 @@ fun MobileHomeScreen(
                                 }
                             }
                         }
-                        item { ApiCard(state.apiBaseUrl) }
+                        if (screenMode == MobileScreenMode.Queue) {
+                            item { ApiCard(state.apiBaseUrl) }
+                        }
                     }
                 }
             }
@@ -817,20 +796,20 @@ internal fun MobileAppHeader(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(MobileUiTags.SCREEN_TITLE),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
             modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(36.dp)
                     .background(
                         Brush.linearGradient(listOf(Blue400, Mint400)),
-                        RoundedCornerShape(16.dp)
+                        RoundedCornerShape(14.dp)
                     )
             )
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -843,25 +822,35 @@ internal fun MobileAppHeader(
                 Text(
                     "StatusFlow",
                     modifier = Modifier.semantics { heading() },
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
         Button(
             onClick = onRefresh,
+            modifier = Modifier.size(width = 92.dp, height = 42.dp),
             shape = RoundedCornerShape(999.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
         ) {
-            Text("Sync ${mobileSyncLabel(syncState)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "↻ ${mobileSyncLabel(syncState)}",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         Button(
             onClick = onSignOut,
+            modifier = Modifier.size(width = 52.dp, height = 42.dp),
             shape = RoundedCornerShape(999.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Color.White),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
         ) {
             Text(userInitials(session), fontWeight = FontWeight.Bold)
         }
@@ -1144,7 +1133,7 @@ private fun StatusCounterCard(
 ) {
     Card(
         modifier = modifier
-            .size(width = 112.dp, height = 64.dp)
+            .size(width = 104.dp, height = 58.dp)
             .clickable { onClick() }
             .semantics {
                 role = Role.Button
@@ -1155,11 +1144,11 @@ private fun StatusCounterCard(
         border = BorderStroke(1.dp, if (active) Blue300.copy(alpha = 0.72f) else Slate300.copy(alpha = 0.18f))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = Slate300, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(count.toString(), style = MaterialTheme.typography.titleLarge, color = accent, fontWeight = FontWeight.Bold)
+            Text(count.toString(), style = MaterialTheme.typography.titleMedium, color = accent, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -1178,7 +1167,7 @@ internal fun QueueToolbar(
         OutlinedTextField(
             value = searchQuery,
             onValueChange = onSearchQueryChange,
-            label = { Text("Search code, title, or customer") },
+            placeholder = { Text("Search code, title, customer") },
             modifier = Modifier.weight(1f).testTag(MobileUiTags.SEARCH_INPUT),
             singleLine = true
         )
@@ -1186,7 +1175,7 @@ internal fun QueueToolbar(
             onClick = onCreate,
             shape = RoundedCornerShape(18.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Blue400, contentColor = Navy900),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Text("Create", fontWeight = FontWeight.Bold)
         }
@@ -1399,10 +1388,10 @@ internal fun CreateOrderScreen(
     onCancel: () -> Unit
 ) {
     ShellCard(modifier = Modifier.testTag(MobileUiTags.CREATE_CARD)) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionLabel(
                 title = "New order",
-                subtitle = "New orders start in New and appear at the top of the queue."
+                subtitle = "New orders start in New."
             )
             CompactInfoCard(title = "Customer", value = customerName, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(
@@ -1421,10 +1410,10 @@ internal fun CreateOrderScreen(
                 modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.CREATE_DESCRIPTION_INPUT).semantics {
                     contentDescription = "Description"
                 },
-                minLines = 5
+                minLines = 4
             )
             ShellCard {
-                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Text("Preview", style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
                         StatusBadge(label = "New", accent = Blue400)
@@ -1438,7 +1427,7 @@ internal fun CreateOrderScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        "Will be inserted at the top of Active queue after submit.",
+                        "Will appear at the top of the queue.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Slate300
                     )
@@ -1504,7 +1493,7 @@ internal fun ListControlsCard(
     ShellCard {
         BoxWithConstraints {
             val isCompact = maxWidth < 360.dp
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel(title = "Queue controls", subtitle = "Slice the queue fast when volume rises.")
                 OutlinedTextField(
                     value = searchQuery,
@@ -1609,29 +1598,37 @@ internal fun DetailScreenCard(
 ) {
     BoxWithConstraints {
         val isCompact = maxWidth < 360.dp
-        Column(modifier = Modifier.testTag(MobileUiTags.DETAIL_SCREEN), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(modifier = Modifier.testTag(MobileUiTags.DETAIL_SCREEN), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Navy500),
-                shape = RoundedCornerShape(28.dp),
+                shape = RoundedCornerShape(24.dp),
                 border = BorderStroke(1.dp, Blue300.copy(alpha = 0.28f))
             ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = onBack,
                         shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100)
+                        colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         Text("Back to queue")
                     }
                     Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
-                    Text(detail.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(
+                        detail.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     if (isCompact) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
                             Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
                         }
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             CompactInfoCard(
                                 title = "Customer",
                                 value = detail.customerName,
@@ -1648,7 +1645,7 @@ internal fun DetailScreenCard(
                             StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
                             Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             CompactInfoCard(
                                 title = "Customer",
                                 value = detail.customerName,
@@ -1670,6 +1667,7 @@ internal fun DetailScreenCard(
                                 enabled = !isSubmitting,
                                 onClick = { onTransitionOrder(allowedTransitions.first()) },
                                 shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Blue400,
                                     contentColor = Navy900,
@@ -1683,6 +1681,7 @@ internal fun DetailScreenCard(
                             Button(
                                 onClick = { onSelectTab(MobileDetailTab.Comments) },
                                 shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -1701,7 +1700,7 @@ internal fun DetailScreenCard(
             )
 
             when (selectedTab) {
-                MobileDetailTab.Overview -> DetailSectionCard(title = "Overview", subtitle = "The minimum useful context for this order.") {
+                MobileDetailTab.Overview -> DetailSectionCard(title = "Description", subtitle = "") {
                     Text(detail.description, style = MaterialTheme.typography.bodyLarge, color = Color.White)
                     if (!isOperator) {
                         FeedbackInline(label = "Customer mode is read-only for status changes.", accent = Amber300)
@@ -1959,7 +1958,7 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
     ) {
         BoxWithConstraints {
             val isCompact = maxWidth < 360.dp
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (isCompact) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
@@ -1979,7 +1978,7 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
                 }
                 Text(
                     order.title,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
@@ -1999,7 +1998,7 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
                         )
                     }
                 } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         CompactMetaPill(
                             label = "Customer",
                             value = order.customerName,
@@ -2056,8 +2055,12 @@ private fun FeedbackCard(title: String, body: String, accent: Color, surface: Co
 @Composable
 private fun DetailSectionCard(title: String, subtitle: String, content: @Composable () -> Unit) {
     ShellCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SectionLabel(title = title, subtitle = subtitle)
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (subtitle.isBlank()) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+            } else {
+                SectionLabel(title = title, subtitle = subtitle)
+            }
             content()
         }
     }
@@ -2104,7 +2107,7 @@ private fun CompactInfoCard(title: String, value: String, modifier: Modifier = M
         colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.82f)),
         shape = RoundedCornerShape(20.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(title, style = MaterialTheme.typography.labelSmall, color = Slate300)
             Text(value, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -2118,7 +2121,7 @@ private fun CompactMetaPill(label: String, value: String, modifier: Modifier = M
         colors = CardDefaults.cardColors(containerColor = Navy900.copy(alpha = 0.24f)),
         shape = RoundedCornerShape(18.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = Slate300)
             Text(value, style = MaterialTheme.typography.bodySmall, color = Slate100, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -2196,7 +2199,15 @@ private fun compactTimestampLabel(label: String): String {
 }
 
 private fun mobileSyncLabel(syncState: MobileSyncState): String {
-    return syncState.lastSuccessfulRefreshLabel?.let(::compactTimestampLabel) ?: "now"
+    return syncState.lastSuccessfulRefreshLabel
+        ?.split(",")
+        ?.lastOrNull()
+        ?.trim()
+        ?.replace(" AM", "")
+        ?.replace(" PM", "")
+        ?.replace("\u202FAM", "")
+        ?.replace("\u202FPM", "")
+        ?: "now"
 }
 
 private fun userInitials(session: MobileSessionSummary?): String {
