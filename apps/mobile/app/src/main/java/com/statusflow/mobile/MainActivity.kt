@@ -24,6 +24,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -1650,6 +1652,7 @@ internal fun DetailScreenCard(
 ) {
     BoxWithConstraints {
         val isCompact = maxWidth < 360.dp
+        var statusMenuExpanded by remember { mutableStateOf(false) }
         Column(modifier = Modifier.testTag(MobileUiTags.DETAIL_SCREEN), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1658,7 +1661,14 @@ internal fun DetailScreenCard(
                 border = BorderStroke(1.dp, Blue300.copy(alpha = 0.28f))
             ) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                        StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
+                    }
                     Text(
                         detail.title,
                         style = MaterialTheme.typography.titleMedium,
@@ -1668,10 +1678,6 @@ internal fun DetailScreenCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     if (isCompact) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
-                            Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
-                        }
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             CompactInfoCard(
                                 title = "Customer",
@@ -1679,16 +1685,12 @@ internal fun DetailScreenCard(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             CompactInfoCard(
-                                title = "Comments",
-                                value = detail.comments.size.toString(),
+                                title = "Updated",
+                                value = compactTimestampLabel(detail.updatedAtLabel),
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
                     } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
-                            Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
-                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             CompactInfoCard(
                                 title = "Customer",
@@ -1696,8 +1698,8 @@ internal fun DetailScreenCard(
                                 modifier = Modifier.weight(1f)
                             )
                             CompactInfoCard(
-                                title = "Comments",
-                                value = detail.comments.size.toString(),
+                                title = "Updated",
+                                value = compactTimestampLabel(detail.updatedAtLabel),
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -1706,10 +1708,10 @@ internal fun DetailScreenCard(
                         FeedbackInline(label = actionMessage, accent = Mint400)
                     }
                     if (isOperator && allowedTransitions.isNotEmpty()) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
                             Button(
                                 enabled = !isSubmitting,
-                                onClick = { onTransitionOrder(allowedTransitions.first()) },
+                                onClick = { statusMenuExpanded = true },
                                 shape = RoundedCornerShape(16.dp),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                 colors = ButtonDefaults.buttonColors(
@@ -1718,18 +1720,24 @@ internal fun DetailScreenCard(
                                     disabledContainerColor = Navy600,
                                     disabledContentColor = Slate300
                                 ),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("Change status")
                             }
-                            Button(
-                                onClick = { onSelectTab(MobileDetailTab.Comments) },
-                                shape = RoundedCornerShape(16.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
-                                modifier = Modifier.weight(1f)
+                            DropdownMenu(
+                                expanded = statusMenuExpanded,
+                                onDismissRequest = { statusMenuExpanded = false },
+                                containerColor = Navy700
                             ) {
-                                Text("Add note")
+                                allowedTransitions.forEach { status ->
+                                    DropdownMenuItem(
+                                        text = { Text("Move to ${statusLabel(status)}", color = Slate100) },
+                                        onClick = {
+                                            statusMenuExpanded = false
+                                            onTransitionOrder(status)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -1750,25 +1758,6 @@ internal fun DetailScreenCard(
                         FeedbackInline(label = "Customer mode is read-only for status changes.", accent = Amber300)
                     } else if (allowedTransitions.isEmpty()) {
                         FeedbackInline(label = "This order is already in a terminal state.", accent = Mint400)
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            allowedTransitions.forEach { status ->
-                                Button(
-                                    enabled = !isSubmitting,
-                                    onClick = { onTransitionOrder(status) },
-                                    shape = RoundedCornerShape(18.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Navy700,
-                                        contentColor = Slate100,
-                                        disabledContainerColor = Navy600,
-                                        disabledContentColor = Slate300
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text("Move to ${statusLabel(status)}")
-                                }
-                            }
-                        }
                     }
                 }
 
