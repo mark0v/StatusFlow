@@ -1753,7 +1753,7 @@ internal fun SelectedOrderTray(order: MobileOrderSummary, onOpen: () -> Unit) {
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    "Open details, history, and comments",
+                    order.title,
                     style = MaterialTheme.typography.bodySmall,
                     color = Slate300,
                     maxLines = 1,
@@ -1785,21 +1785,14 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
             .clickable { onSelectOrder(order.id) },
         colors = CardDefaults.cardColors(containerColor = if (isSelected) Navy500 else Navy700),
         shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, if (isSelected) Blue300.copy(alpha = 0.55f) else Slate300.copy(alpha = 0.18f))
+        border = BorderStroke(1.dp, if (isSelected) Blue300.copy(alpha = 0.78f) else Slate300.copy(alpha = 0.18f))
     ) {
         BoxWithConstraints {
             val isCompact = maxWidth < 360.dp
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (isCompact) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                if (isSelected) "Ready in focus lane" else "Tap to open details",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) Mint400 else Slate300
-                            )
-                        }
+                        Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
                         StatusBadge(label = order.statusLabel, accent = order.statusColor)
                     }
                 } else {
@@ -1810,11 +1803,6 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
                             Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                if (isSelected) "Ready in focus lane" else "Tap to open details",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) Mint400 else Slate300
-                            )
                         }
                         StatusBadge(label = order.statusLabel, accent = order.statusColor)
                     }
@@ -1855,7 +1843,7 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
                     }
                 }
                 if (isSelected) {
-                    FeedbackInline(label = "Selected for detail view", accent = Mint400)
+                    FeedbackInline(label = "Selected", accent = Mint400)
                 }
             }
         }
