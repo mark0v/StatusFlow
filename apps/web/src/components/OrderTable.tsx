@@ -3,8 +3,6 @@ import {
   statusLabels,
   statusTone,
   type OrderCard,
-  type OrderStatus,
-  type OrderStatusLifecycle,
   type SortDirection,
   type SortField
 } from "../data/webTypes";
@@ -13,7 +11,6 @@ interface Props {
   orders: OrderCard[];
   paginatedOrders: OrderCard[];
   sortedOrders: OrderCard[];
-  lifecycle: OrderStatusLifecycle | null;
   isLoading: boolean;
   isRefreshing: boolean;
   isSubmitting: boolean;
@@ -26,7 +23,6 @@ interface Props {
   actionError: string | null;
   currentCustomer: { id: string; name: string } | null;
   selectedOrderId: string | null;
-  openActionsOrderId: string | null;
   sortField: SortField;
   sortDirection: SortDirection;
   syncSource: "live" | "cached";
@@ -45,8 +41,6 @@ interface Props {
   onFormDescriptionChange: (description: string) => void;
   onToggleSort: (field: SortField) => void;
   onSelectOrder: (orderId: string) => void;
-  onToggleActionsOrderId: (orderId: string | null) => void;
-  onTransition: (orderId: string, toStatus: OrderStatus) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
 }
@@ -77,7 +71,6 @@ export function OrderTable({
   orders,
   paginatedOrders,
   sortedOrders,
-  lifecycle,
   isLoading,
   isRefreshing,
   isSubmitting,
@@ -90,7 +83,6 @@ export function OrderTable({
   actionError,
   currentCustomer,
   selectedOrderId,
-  openActionsOrderId,
   sortField,
   sortDirection,
   syncSource,
@@ -109,12 +101,10 @@ export function OrderTable({
   onFormDescriptionChange,
   onToggleSort,
   onSelectOrder,
-  onToggleActionsOrderId,
-  onTransition,
   onPageChange,
   onPageSizeChange
 }: Props) {
-  const visibleColumnCount = isOperator ? 6 : 4;
+  const visibleColumnCount = isOperator ? 4 : 3;
   const searchPlaceholder = isOperator
     ? "Search code, title, or customer"
     : "Search code or title";
@@ -247,17 +237,14 @@ export function OrderTable({
           <div className="table-wrap">
             <table className="orders-table">
             <colgroup>
-              <col className="col-code" />
-              <col className="col-title" />
+              <col className="col-order" />
               {isOperator ? <col className="col-customer" /> : null}
               <col className="col-status" />
               <col className="col-updated" />
-              {isOperator ? <col className="col-actions" /> : null}
             </colgroup>
             <thead>
               <tr>
-                <th>Code</th>
-                <th>Title</th>
+                <th>Order <span className="sort-icon sort-icon-static">↕</span></th>
                 {isOperator ? (
                   <th>
                     <button
@@ -287,7 +274,6 @@ export function OrderTable({
                     Updated <span className="sort-icon">{sortIndicator("updated_at", sortField, sortDirection)}</span>
                   </button>
                 </th>
-                {isOperator ? <th>Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -300,69 +286,25 @@ export function OrderTable({
                   </td>
                 </tr>
               ) : (
-                paginatedOrders.map((order) => {
-                  const nextStatuses = lifecycle?.allowed_transitions[order.status] ?? [];
-
-                  return (
-                    <tr
-                      className={selectedOrderId === order.id ? "is-selected" : ""}
-                      key={order.id}
-                      onClick={() => onSelectOrder(order.id)}
-                    >
-                      <td className="cell-code">{order.code}</td>
-                      <td className="cell-title">{order.title}</td>
-                      {isOperator ? <td className="cell-customer">{order.customer_name}</td> : null}
-                      <td>
-                        <span className={`pill ${statusTone(order.status)}`}>
-                          {statusLabels[order.status]}
-                        </span>
-                      </td>
-                      <td className="cell-updated">{formatTimestamp(order.updated_at)}</td>
-                      {isOperator ? (
-                        <td className="cell-actions">
-                          <div className="table-actions">
-                            {nextStatuses.length === 0 ? (
-                              <span className="transition-terminal">Terminal state</span>
-                            ) : order.id.startsWith("queued-order-") ? (
-                              <span className="transition-terminal">Queued offline</span>
-                            ) : (
-                              <div className="row-action-menu">
-                                <button
-                                  className="transition-button transition-trigger"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onToggleActionsOrderId(openActionsOrderId === order.id ? null : order.id);
-                                  }}
-                                  type="button"
-                                >
-                                  Change status
-                                </button>
-                                {openActionsOrderId === order.id ? (
-                                  <div className="row-dropdown">
-                                    {nextStatuses.map((status) => (
-                                      <button
-                                        key={status}
-                                        className="dropdown-action"
-                                        disabled={isSubmitting}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          void onTransition(order.id, status);
-                                        }}
-                                        type="button"
-                                      >
-                                        {statusLabels[status]}
-                                      </button>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      ) : null}
-                    </tr>
-                  );
-                })
+                paginatedOrders.map((order) => (
+                  <tr
+                    className={selectedOrderId === order.id ? "is-selected" : ""}
+                    key={order.id}
+                    onClick={() => onSelectOrder(order.id)}
+                  >
+                    <td className="cell-order">
+                      <span className="cell-code">{order.code}</span>
+                      <span className="cell-title">{order.title}</span>
+                    </td>
+                    {isOperator ? <td className="cell-customer">{order.customer_name}</td> : null}
+                    <td>
+                      <span className={`pill ${statusTone(order.status)}`}>
+                        {statusLabels[order.status]}
+                      </span>
+                    </td>
+                    <td className="cell-updated">{formatTimestamp(order.updated_at)}</td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>

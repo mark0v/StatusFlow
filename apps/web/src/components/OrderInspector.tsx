@@ -5,7 +5,9 @@ import {
   statusLabels,
   statusTone,
   type OrderCard,
-  type OrderDetail
+  type OrderDetail,
+  type OrderStatus,
+  type OrderStatusLifecycle
 } from "../data/webTypes";
 
 interface Props {
@@ -15,12 +17,16 @@ interface Props {
   isRefreshing: boolean;
   isSubmitting: boolean;
   isOperator: boolean;
+  lifecycle: OrderStatusLifecycle | null;
+  openActionsOrderId: string | null;
   selectedOrderIsQueuedDraft: boolean;
   commentDraft: string;
   recoveryCandidateOrder: OrderCard | null;
   onRefresh: () => void;
   onClearSelection: () => void;
   onRecoverSelection: () => void;
+  onToggleActionsOrderId: (orderId: string | null) => void;
+  onTransition: (orderId: string, toStatus: OrderStatus) => void;
   onCommentDraftChange: (draft: string) => void;
   onAddComment: (event: FormEvent<HTMLFormElement>) => void;
 }
@@ -34,17 +40,33 @@ export function OrderInspector({
   isRefreshing,
   isSubmitting,
   isOperator,
+  lifecycle,
+  openActionsOrderId,
   selectedOrderIsQueuedDraft,
   commentDraft,
   recoveryCandidateOrder,
   onRefresh,
   onClearSelection,
   onRecoverSelection,
+  onToggleActionsOrderId,
+  onTransition,
   onCommentDraftChange,
   onAddComment
 }: Props) {
   const [activeTab, setActiveTab] = useState<InspectorTab>("overview");
   const visibleComments = isOperator ? selectedOrderDetail?.comments ?? [] : [];
+  const nextStatuses = selectedOrderDetail
+    ? lifecycle?.allowed_transitions[selectedOrderDetail.status] ?? []
+    : [];
+  const canChangeStatus = Boolean(
+    isOperator &&
+    selectedOrderDetail &&
+    !selectedOrderDetail.id.startsWith("queued-order-") &&
+    nextStatuses.length > 0
+  );
+  const isStatusMenuOpen = Boolean(
+    selectedOrderDetail && openActionsOrderId === selectedOrderDetail.id
+  );
   const commentTabLabel = isOperator ? "Comments" : "Messages";
   const commentCount = isOperator ? visibleComments.length : 0;
   const supportHref = selectedOrderDetail
@@ -120,6 +142,45 @@ export function OrderInspector({
                 <strong>{formatTimestamp(selectedOrderDetail.updated_at)}</strong>
               </div>
             </div>
+            {isOperator && (
+              <div className="inspector-actions">
+                {canChangeStatus ? (
+                  <div className="row-action-menu">
+                    <button
+                      className="primary-action inspector-primary-action"
+                      onClick={() => onToggleActionsOrderId(isStatusMenuOpen ? null : selectedOrderDetail.id)}
+                      type="button"
+                    >
+                      Change status
+                    </button>
+                    {isStatusMenuOpen ? (
+                      <div className="row-dropdown inspector-dropdown">
+                        {nextStatuses.map((status) => (
+                          <button
+                            key={status}
+                            className="dropdown-action"
+                            disabled={isSubmitting}
+                            onClick={() => {
+                              onToggleActionsOrderId(null);
+                              void onTransition(selectedOrderDetail.id, status);
+                            }}
+                            type="button"
+                          >
+                            {statusLabels[status]}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <span className="transition-terminal">
+                    {selectedOrderDetail.id.startsWith("queued-order-")
+                      ? "Queued offline"
+                      : "Terminal state"}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="inspector-tabs" role="tablist" aria-label="Order detail sections">

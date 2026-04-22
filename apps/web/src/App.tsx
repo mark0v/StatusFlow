@@ -1002,7 +1002,6 @@ export default function App() {
               orders={orders}
               paginatedOrders={paginatedOrders}
               sortedOrders={sortedOrders}
-              lifecycle={lifecycle}
               isLoading={isLoading}
               isRefreshing={isRefreshing}
               isSubmitting={isSubmitting}
@@ -1015,7 +1014,6 @@ export default function App() {
               actionError={actionError}
               currentCustomer={currentCustomer}
               selectedOrderId={selectedOrderId}
-              openActionsOrderId={openActionsOrderId}
               sortField={sortField}
               sortDirection={sortDirection}
               syncSource={syncSource}
@@ -1034,8 +1032,6 @@ export default function App() {
               onFormDescriptionChange={(description) => setFormState((current) => ({ ...current, description }))}
               onToggleSort={toggleSort}
               onSelectOrder={setSelectedOrderId}
-              onToggleActionsOrderId={setOpenActionsOrderId}
-              onTransition={handleTransition}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
             />
@@ -1047,12 +1043,16 @@ export default function App() {
               isRefreshing={isRefreshing}
               isSubmitting={isSubmitting}
               isOperator={isOperator}
+              lifecycle={lifecycle}
+              openActionsOrderId={openActionsOrderId}
               selectedOrderIsQueuedDraft={selectedOrderIsQueuedDraft}
               commentDraft={commentDraft}
               recoveryCandidateOrder={recoveryCandidateOrder}
               onRefresh={handleRefresh}
               onClearSelection={handleClearSelection}
               onRecoverSelection={handleRecoverSelection}
+              onToggleActionsOrderId={setOpenActionsOrderId}
+              onTransition={handleTransition}
               onCommentDraftChange={setCommentDraft}
               onAddComment={handleAddComment}
             />
