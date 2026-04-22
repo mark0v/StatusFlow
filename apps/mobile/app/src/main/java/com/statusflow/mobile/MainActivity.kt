@@ -570,7 +570,14 @@ fun MobileHomeScreen(
                         verticalArrangement = Arrangement.spacedBy(20.dp),
                         contentPadding = PaddingValues(bottom = 24.dp)
                     ) {
-                        item { ScreenTitle(session = state.session, onSignOut = onSignOut) }
+                        item {
+                            MobileAppHeader(
+                                session = state.session,
+                                syncState = state.syncState,
+                                onRefresh = onRefresh,
+                                onSignOut = onSignOut
+                            )
+                        }
                         item {
                         QueueOverviewCard(
                             totalOrders = state.orders.size,
@@ -838,6 +845,68 @@ internal fun ScreenTitle(session: MobileSessionSummary? = null, onSignOut: (() -
                     SessionIdentityCard(session = session, onSignOut = onSignOut, modifier = Modifier.weight(1f))
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun MobileAppHeader(
+    session: MobileSessionSummary?,
+    syncState: MobileSyncState,
+    onRefresh: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(MobileUiTags.SCREEN_TITLE),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(
+                        Brush.linearGradient(listOf(Blue400, Mint400)),
+                        RoundedCornerShape(16.dp)
+                    )
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    if (session?.role == "customer") "MOBILE PORTAL" else "MOBILE OPS",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Blue300,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "StatusFlow",
+                    modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        Button(
+            onClick = onRefresh,
+            shape = RoundedCornerShape(999.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text("Sync ${mobileSyncLabel(syncState)}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Button(
+            onClick = onSignOut,
+            shape = RoundedCornerShape(999.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Color.White),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(userInitials(session), fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -1907,6 +1976,26 @@ private fun statusLabel(status: String): String = status.split("_").joinToString
 private fun compactTimestampLabel(label: String): String {
     val parts = label.split(",").map { it.trim() }
     return if (parts.size >= 3) "${parts[0]}, ${parts[2]}" else label
+}
+
+private fun mobileSyncLabel(syncState: MobileSyncState): String {
+    return syncState.lastSuccessfulRefreshLabel?.let(::compactTimestampLabel) ?: "now"
+}
+
+private fun userInitials(session: MobileSessionSummary?): String {
+    val nameParts = session?.name
+        ?.split(" ")
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        .orEmpty()
+
+    val initials = nameParts
+        .take(2)
+        .joinToString("") { it.first().uppercase() }
+
+    return initials.ifBlank {
+        session?.email?.firstOrNull()?.uppercase() ?: "SF"
+    }
 }
 
 private fun sortOptionLabel(option: MobileOrderSortOption): String = when (option) {
