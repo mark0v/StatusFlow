@@ -124,7 +124,7 @@ data class MobileHomeUiState(
 
 internal enum class MobileOrderSortOption { UPDATED_DESC, UPDATED_ASC, TITLE_ASC, STATUS_ASC }
 
-private enum class MobileScreenMode { Queue, Detail, Create }
+private enum class MobileScreenMode { Queue, Detail, Create, Profile }
 
 internal enum class MobileDetailTab { Overview, History, Comments }
 
@@ -571,7 +571,7 @@ fun MobileHomeScreen(
                                 session = state.session,
                                 syncState = state.syncState,
                                 onRefresh = onRefresh,
-                                onSignOut = onSignOut
+                                onProfile = { screenModeName = MobileScreenMode.Profile.name }
                             )
                         }
                         if (state.actionMessage != null) {
@@ -655,6 +655,17 @@ fun MobileHomeScreen(
                                                     screenModeName = MobileScreenMode.Queue.name
                                                 },
                                                 onCancel = { screenModeName = MobileScreenMode.Queue.name }
+                                            )
+                                        }
+                                    }
+
+                                    MobileScreenMode.Profile -> {
+                                        item {
+                                            ProfileScreen(
+                                                session = state.session,
+                                                apiBaseUrl = state.apiBaseUrl,
+                                                onBack = { screenModeName = MobileScreenMode.Queue.name },
+                                                onSignOut = onSignOut
                                             )
                                         }
                                     }
@@ -790,7 +801,7 @@ internal fun MobileAppHeader(
     session: MobileSessionSummary?,
     syncState: MobileSyncState,
     onRefresh: () -> Unit,
-    onSignOut: () -> Unit
+    onProfile: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -846,7 +857,7 @@ internal fun MobileAppHeader(
             )
         }
         Button(
-            onClick = onSignOut,
+            onClick = onProfile,
             modifier = Modifier.size(width = 52.dp, height = 42.dp),
             shape = RoundedCornerShape(999.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Color.White),
@@ -872,6 +883,47 @@ private fun SessionIdentityCard(session: MobileSessionSummary, onSignOut: () -> 
             Button(
                 onClick = onSignOut,
                 shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Navy600, contentColor = Slate100),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Sign out")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileScreen(
+    session: MobileSessionSummary?,
+    apiBaseUrl: String,
+    onBack: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    ShellCard {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = onBack,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                Text("Back to queue")
+            }
+            SectionLabel(
+                title = "Profile",
+                subtitle = "Account and workspace connection for this device."
+            )
+            if (session != null) {
+                CompactInfoCard(title = "Name", value = session.name, modifier = Modifier.fillMaxWidth())
+                CompactInfoCard(title = "Role", value = session.role.replaceFirstChar { it.uppercase() }, modifier = Modifier.fillMaxWidth())
+                CompactInfoCard(title = "Email", value = session.email, modifier = Modifier.fillMaxWidth())
+            } else {
+                FeedbackInline(label = "No active mobile session.", accent = Amber300)
+            }
+            ApiCard(apiBaseUrl)
+            Button(
+                onClick = onSignOut,
+                shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Navy600, contentColor = Slate100),
                 modifier = Modifier.fillMaxWidth()
             ) {
