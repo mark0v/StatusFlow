@@ -657,18 +657,12 @@ fun MobileHomeScreen(
                                             )
                                         }
                                         item {
-                                            CreateOrderCard(
+                                            CreateOrderScreen(
                                                 title = title,
                                                 description = description,
-                                                isExpanded = true,
+                                                customerName = state.users.firstOrNull { it.role == "customer" }?.name ?: state.session?.name ?: "Customer",
                                                 isSubmitting = state.isSubmitting,
-                                                isLoading = state.isLoading || state.isRefreshing,
                                                 isEnabled = state.canCreateOrders,
-                                                helperText = if (state.isOperator) {
-                                                    "Operator mode can still capture new work into the shared queue."
-                                                } else {
-                                                    "Customer mode submits directly into the same shared queue."
-                                                },
                                                 onTitleChange = { title = it },
                                                 onDescriptionChange = { description = it },
                                                 onCreate = {
@@ -677,8 +671,7 @@ fun MobileHomeScreen(
                                                     description = ""
                                                     screenModeName = MobileScreenMode.Queue.name
                                                 },
-                                                onRefresh = onRefresh,
-                                                onToggleExpanded = { screenModeName = MobileScreenMode.Queue.name }
+                                                onCancel = { screenModeName = MobileScreenMode.Queue.name }
                                             )
                                         }
                                     }
@@ -1388,6 +1381,97 @@ internal fun CreateOrderCard(
                 if (!isEnabled) {
                     FeedbackInline(label = "Sign in before creating a new order", accent = Amber300)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CreateOrderScreen(
+    title: String,
+    description: String,
+    customerName: String,
+    isSubmitting: Boolean,
+    isEnabled: Boolean,
+    onTitleChange: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onCreate: () -> Unit,
+    onCancel: () -> Unit
+) {
+    ShellCard(modifier = Modifier.testTag(MobileUiTags.CREATE_CARD)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            SectionLabel(
+                title = "New order",
+                subtitle = "New orders start in New and appear at the top of the queue."
+            )
+            CompactInfoCard(title = "Customer", value = customerName, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = title,
+                onValueChange = onTitleChange,
+                label = { Text("Order title") },
+                modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.CREATE_TITLE_INPUT).semantics {
+                    contentDescription = "Order title"
+                },
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = description,
+                onValueChange = onDescriptionChange,
+                label = { Text("Description") },
+                modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.CREATE_DESCRIPTION_INPUT).semantics {
+                    contentDescription = "Description"
+                },
+                minLines = 5
+            )
+            ShellCard {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Text("Preview", style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                        StatusBadge(label = "New", accent = Blue400)
+                    }
+                    Text(
+                        title.ifBlank { "Order title" },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "Will be inserted at the top of Active queue after submit.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate300
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    enabled = !isSubmitting && isEnabled && title.trim().length >= 3,
+                    onClick = onCreate,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Blue400,
+                        contentColor = Navy900,
+                        disabledContainerColor = Navy600,
+                        disabledContentColor = Slate300
+                    ),
+                    modifier = Modifier.weight(1f).testTag(MobileUiTags.CREATE_SUBMIT)
+                ) {
+                    Text(if (isSubmitting) "Creating..." else "Create order")
+                }
+                Button(
+                    enabled = !isSubmitting,
+                    onClick = onCancel,
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, Slate300.copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Cancel")
+                }
+            }
+            if (!isEnabled) {
+                FeedbackInline(label = "Sign in before creating a new order", accent = Amber300)
             }
         }
     }
