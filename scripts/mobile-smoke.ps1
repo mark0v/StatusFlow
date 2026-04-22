@@ -129,7 +129,7 @@ $dumpContent = Get-Content -Path $dumpPath -Raw
 $requiredMarkers = @("StatusFlow")
 $missingMarkers = @($requiredMarkers | Where-Object { $dumpContent -notmatch [regex]::Escape($_) })
 
-$hasQueueMarkers = @("Active queue", "Queue controls", "Queue snapshot") |
+$hasQueueMarkers = @("Active queue", "StatusFlow", "Total") |
     Where-Object { $dumpContent -match [regex]::Escape($_) }
 $hasLoginMarkers = @("Sign in to the live queue", "Seeded operator", "Seeded customer") |
     Where-Object { $dumpContent -match [regex]::Escape($_) }

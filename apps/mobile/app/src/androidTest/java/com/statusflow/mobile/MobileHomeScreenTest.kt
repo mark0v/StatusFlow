@@ -118,18 +118,19 @@ class MobileHomeScreenTest {
                     allowedTransitions = listOf("approved", "rejected"),
                     isSubmitting = false,
                     actionMessage = null,
+                    selectedTab = MobileDetailTab.Overview,
                     commentBody = "",
                     onCommentBodyChange = {},
+                    onSelectTab = {},
                     onTransitionOrder = { transitionedStatus = it },
                     onAddComment = {},
-                    onBack = {},
                     isOperator = true
                 )
             }
         }
 
         composeRule.onNodeWithTag(MobileUiTags.DETAIL_SCREEN).assertIsDisplayed()
-        composeRule.onNodeWithText("Approved").performClick()
+        composeRule.onNodeWithText("Move to Approved").performClick()
 
         assertEquals("approved", transitionedStatus)
     }

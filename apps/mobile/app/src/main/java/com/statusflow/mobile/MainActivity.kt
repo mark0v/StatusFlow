@@ -24,6 +24,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -123,6 +125,10 @@ data class MobileHomeUiState(
 }
 
 internal enum class MobileOrderSortOption { UPDATED_DESC, UPDATED_ASC, TITLE_ASC, STATUS_ASC }
+
+private enum class MobileScreenMode { Queue, Detail, Create, Profile }
+
+internal enum class MobileDetailTab { Overview, History, Comments }
 
 object MobileUiTags {
     const val LOGIN_CARD = "login_card"
@@ -379,9 +385,7 @@ class MobileHomeViewModel(
             state = state,
             selectedOrderId = selectedOrderId,
             action = { repository.addComment(selectedOrderId, operator.id, body) },
-            successMessage = { _, queuedOffline ->
-                if (queuedOffline) "Comment saved locally and queued for sync." else "Comment added successfully."
-            }
+            successMessage = { _, _ -> null }
         )
     }
 
@@ -389,7 +393,7 @@ class MobileHomeViewModel(
         state: MobileHomeUiState,
         selectedOrderId: String,
         action: suspend () -> com.statusflow.mobile.data.MobileMutationResult,
-        successMessage: (MobileOrderDetail, Boolean) -> String
+        successMessage: (MobileOrderDetail, Boolean) -> String?
     ) {
         viewModelScope.launch {
             _uiState.value = state.copy(isSubmitting = true, actionMessage = null, errorMessage = null)
@@ -491,23 +495,25 @@ fun MobileHomeScreen(
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var commentBody by remember { mutableStateOf("") }
-    var isShowingDetail by rememberSaveable { mutableStateOf(false) }
-    var isCreateExpanded by rememberSaveable { mutableStateOf(false) }
+    var screenModeName by rememberSaveable { mutableStateOf(MobileScreenMode.Queue.name) }
+    var detailTabName by rememberSaveable { mutableStateOf(MobileDetailTab.Overview.name) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
-    var sortOptionName by rememberSaveable { mutableStateOf(MobileOrderSortOption.UPDATED_DESC.name) }
-    val sortOption = MobileOrderSortOption.valueOf(sortOptionName)
+    val screenMode = MobileScreenMode.valueOf(screenModeName)
+    val detailTab = MobileDetailTab.valueOf(detailTabName)
 
     // Auto-show detail when order is pre-selected via debug intent
     LaunchedEffect(state.selectedOrderDetail) {
-        if (state.selectedOrderDetail != null && !isShowingDetail) {
-            isShowingDetail = true
+        if (state.selectedOrderDetail != null && screenMode == MobileScreenMode.Queue) {
+            screenModeName = MobileScreenMode.Detail.name
         }
     }
 
-    val availableStatuses = state.orders.map { it.rawStatus }.distinct()
+    val statusCounts = remember(state.orders) {
+        state.orders.groupingBy { it.rawStatus }.eachCount()
+    }
 
-    val visibleOrders = remember(state.orders, searchQuery, statusFilter, sortOption) {
+    val visibleOrders = remember(state.orders, searchQuery, statusFilter) {
         val normalizedQuery = searchQuery.trim().lowercase()
         state.orders
             .filter { statusFilter == null || it.rawStatus == statusFilter }
@@ -516,14 +522,6 @@ fun MobileHomeScreen(
                     order.code.lowercase().contains(normalizedQuery) ||
                     order.title.lowercase().contains(normalizedQuery) ||
                     order.customerName.lowercase().contains(normalizedQuery)
-            }
-            .let { orders ->
-                when (sortOption) {
-                    MobileOrderSortOption.UPDATED_DESC -> orders
-                    MobileOrderSortOption.UPDATED_ASC -> orders.reversed()
-                    MobileOrderSortOption.TITLE_ASC -> orders.sortedBy { it.title.lowercase() }
-                    MobileOrderSortOption.STATUS_ASC -> orders.sortedWith(compareBy<MobileOrderSummary> { statusLabel(it.rawStatus) }.thenBy { it.title.lowercase() })
-                }
             }
     }
 
@@ -560,36 +558,20 @@ fun MobileHomeScreen(
             } else {
                 PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize().testTag(MobileUiTags.SCROLL_CONTENT).padding(horizontal = 20.dp, vertical = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                        modifier = Modifier.fillMaxSize().testTag(MobileUiTags.SCROLL_CONTENT).padding(horizontal = 20.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(bottom = 24.dp)
                     ) {
-                        item { ScreenTitle(session = state.session, onSignOut = onSignOut) }
                         item {
-                        QueueOverviewCard(
-                            totalOrders = state.orders.size,
-                            visibleOrders = visibleOrders.size,
-                            selectedOrderCode = state.selectedOrderDetail?.code,
-                            activeFilterLabel = statusFilter?.let(::statusLabel),
-                            syncState = state.syncState
-                        )
-                    }
-                        item {
-                            ListControlsCard(
-                                searchQuery = searchQuery,
-                                selectedStatus = statusFilter,
-                                availableStatuses = availableStatuses,
-                                sortOption = sortOption,
-                                onSearchQueryChange = { searchQuery = it },
-                                onSelectStatus = { selected -> statusFilter = if (statusFilter == selected) null else selected },
-                                onToggleSort = {
-                                    sortOptionName = when (sortOption) {
-                                        MobileOrderSortOption.UPDATED_DESC -> MobileOrderSortOption.UPDATED_ASC
-                                        MobileOrderSortOption.UPDATED_ASC -> MobileOrderSortOption.TITLE_ASC
-                                        MobileOrderSortOption.TITLE_ASC -> MobileOrderSortOption.STATUS_ASC
-                                        MobileOrderSortOption.STATUS_ASC -> MobileOrderSortOption.UPDATED_DESC
-                                    }.name
-                                }
+                            MobileAppHeader(
+                                session = state.session,
+                                actionLabel = when (screenMode) {
+                                    MobileScreenMode.Detail, MobileScreenMode.Profile -> "Back"
+                                    MobileScreenMode.Create -> "Cancel"
+                                    MobileScreenMode.Queue -> null
+                                },
+                                onAction = { screenModeName = MobileScreenMode.Queue.name },
+                                onProfile = { screenModeName = MobileScreenMode.Profile.name }
                             )
                         }
                         if (state.actionMessage != null) {
@@ -628,101 +610,115 @@ fun MobileHomeScreen(
                                 }
                             }
                             else -> {
-                                if (isShowingDetail && state.selectedOrderId != null) {
-                                    item {
-                                        QueueSectionHeader(
-                                            title = if (state.selectedOrderDetail != null) "Selected order" else "Order detail",
-                                            subtitle = if (state.selectedOrderDetail != null) {
-                                                if (state.isOperator) "Review details, update status, and leave context for the next operator."
-                                                else "Review the order timeline and track the latest status from your phone."
-                                            } else {
-                                                "Recover gracefully when a selected order is temporarily unavailable."
-                                            }
-                                        )
-                                    }
-                                    item {
-                                        if (state.selectedOrderDetail != null) {
-                                            DetailScreenCard(
-                                                detail = state.selectedOrderDetail,
-                                                allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
-                                                isSubmitting = state.isSubmitting,
-                                                actionMessage = state.actionMessage,
-                                                commentBody = commentBody,
-                                                onCommentBodyChange = { commentBody = it },
-                                                onTransitionOrder = onTransitionOrder,
-                                                onAddComment = { onAddComment(commentBody.trim()) },
-                                                onBack = { isShowingDetail = false },
-                                                isOperator = state.isOperator
-                                            )
-                                        } else {
-                                            DetailUnavailableCard(
-                                                errorMessage = state.errorMessage,
-                                                onBack = { isShowingDetail = false },
-                                                onRefresh = onRefresh
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    item {
-                                        QueueSectionHeader(
-                                            title = "Active queue",
-                                            subtitle = "Tap any card to move from scan mode into detail mode."
-                                        )
-                                    }
-                                    if (visibleOrders.isEmpty()) {
+                                when (screenMode) {
+                                    MobileScreenMode.Detail -> {
                                         item {
-                                            EmptyQueueCard(
-                                                title = if (state.orders.isEmpty()) "No orders yet" else "No orders match your current view",
-                                                body = if (state.orders.isEmpty()) {
-                                                    "Create the first order from this screen or pull down to refresh when the backend receives new work."
-                                                } else {
-                                                    "Try clearing the current filter, editing the search text, or changing the sort to inspect a different slice of the queue."
+                                            if (state.selectedOrderDetail != null) {
+                                                DetailScreenCard(
+                                                    detail = state.selectedOrderDetail,
+                                                    allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
+                                                    isSubmitting = state.isSubmitting,
+                                                    actionMessage = state.actionMessage,
+                                                    selectedTab = detailTab,
+                                                   commentBody = commentBody,
+                                                   onCommentBodyChange = { commentBody = it },
+                                                   onSelectTab = { detailTabName = it.name },
+                                                   onTransitionOrder = onTransitionOrder,
+                                                   onAddComment = {
+                                                       val submittedComment = commentBody.trim()
+                                                       if (submittedComment.isNotEmpty()) {
+                                                           onAddComment(submittedComment)
+                                                           commentBody = ""
+                                                       }
+                                                   },
+                                                   isOperator = state.isOperator
+                                               )
+                                            } else {
+                                                DetailUnavailableCard(
+                                                    errorMessage = state.errorMessage,
+                                                    onBack = { screenModeName = MobileScreenMode.Queue.name },
+                                                    onRefresh = onRefresh
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    MobileScreenMode.Create -> {
+                                        item {
+                                            CreateOrderScreen(
+                                                title = title,
+                                                description = description,
+                                                customerName = state.users.firstOrNull { it.role == "customer" }?.name ?: state.session?.name ?: "Customer",
+                                                isSubmitting = state.isSubmitting,
+                                                isEnabled = state.canCreateOrders,
+                                                onTitleChange = { title = it },
+                                                onDescriptionChange = { description = it },
+                                                onCreate = {
+                                                    onCreateOrder(title.trim(), description.trim())
+                                                    title = ""
+                                                    description = ""
+                                                    screenModeName = MobileScreenMode.Queue.name
                                                 },
-                                                eyebrow = if (state.orders.isEmpty()) "EMPTY QUEUE" else "FILTERED VIEW",
-                                                accent = if (state.orders.isEmpty()) Blue300 else Amber300
+                                                onCancel = { screenModeName = MobileScreenMode.Queue.name }
                                             )
                                         }
-                                    } else {
-                                        items(visibleOrders) { item ->
-                                            OrderCard(
-                                                order = item,
-                                                isSelected = state.selectedOrderId == item.id,
-                                                onSelectOrder = {
-                                                    onSelectOrder(it)
-                                                    isShowingDetail = true
-                                                }
+                                    }
+
+                                    MobileScreenMode.Profile -> {
+                                        item {
+                                            ProfileScreen(
+                                                session = state.session,
+                                                apiBaseUrl = state.apiBaseUrl,
+                                                onSignOut = onSignOut
                                             )
+                                        }
+                                    }
+
+                                    MobileScreenMode.Queue -> {
+                                        item {
+                                            StatusCounterCarousel(
+                                                totalOrders = state.orders.size,
+                                                statusCounts = statusCounts,
+                                                selectedStatus = statusFilter,
+                                                onSelectStatus = { selected -> statusFilter = selected }
+                                            )
+                                        }
+                                        item {
+                                            QueueToolbar(
+                                                searchQuery = searchQuery,
+                                                onSearchQueryChange = { searchQuery = it },
+                                                onCreate = { screenModeName = MobileScreenMode.Create.name }
+                                            )
+                                        }
+                                        if (visibleOrders.isEmpty()) {
+                                            item {
+                                                EmptyQueueCard(
+                                                    title = if (state.orders.isEmpty()) "No orders yet" else "No orders match your current view",
+                                                    body = if (state.orders.isEmpty()) {
+                                                        "Create the first order from this screen or pull down to refresh when the backend receives new work."
+                                                    } else {
+                                                        "Try clearing the current filter, editing the search text, or changing the search query to inspect a different slice of the queue."
+                                                    },
+                                                    eyebrow = if (state.orders.isEmpty()) "EMPTY QUEUE" else "FILTERED VIEW",
+                                                    accent = if (state.orders.isEmpty()) Blue300 else Amber300
+                                                )
+                                            }
+                                        } else {
+                                            items(visibleOrders) { item ->
+                                                OrderCard(
+                                                    order = item,
+                                                    isSelected = state.selectedOrderId == item.id,
+                                                    onSelectOrder = { orderId ->
+                                                        onSelectOrder(orderId)
+                                                        screenModeName = MobileScreenMode.Detail.name
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                        item {
-                            CreateOrderCard(
-                                title = title,
-                                description = description,
-                                isExpanded = isCreateExpanded,
-                                isSubmitting = state.isSubmitting,
-                                isLoading = state.isLoading || state.isRefreshing,
-                                isEnabled = state.canCreateOrders,
-                                helperText = if (state.isOperator) {
-                                    "Operator mode can still capture new work into the shared queue."
-                                } else {
-                                    "Customer mode submits directly into the same shared queue."
-                                },
-                                onTitleChange = { title = it },
-                                onDescriptionChange = { description = it },
-                                onCreate = {
-                                    onCreateOrder(title.trim(), description.trim())
-                                    title = ""
-                                    description = ""
-                                    isCreateExpanded = false
-                                },
-                                onRefresh = onRefresh,
-                                onToggleExpanded = { isCreateExpanded = !isCreateExpanded }
-                            )
-                        }
-                        item { ApiCard(state.apiBaseUrl) }
                     }
                 }
             }
@@ -797,6 +793,98 @@ internal fun ScreenTitle(session: MobileSessionSummary? = null, onSignOut: (() -
 }
 
 @Composable
+internal fun MobileAppHeader(
+    session: MobileSessionSummary?,
+    actionLabel: String?,
+    onAction: () -> Unit,
+    onProfile: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(MobileUiTags.SCREEN_TITLE),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(
+                        Brush.linearGradient(listOf(Blue400, Mint400)),
+                        RoundedCornerShape(14.dp)
+                    )
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    if (session?.role == "customer") "MOBILE PORTAL" else "MOBILE OPS",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Blue300,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "StatusFlow",
+                    modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        /*
+        Button(
+            onClick = onRefresh,
+            modifier = Modifier.size(width = 92.dp, height = 42.dp),
+            shape = RoundedCornerShape(999.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+        ) {
+            Text(
+                "↻ ${mobileSyncLabel(syncState)}",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        */
+        if (actionLabel != null) {
+            Button(
+                onClick = onAction,
+                modifier = Modifier.size(width = 74.dp, height = 42.dp),
+                shape = RoundedCornerShape(999.dp),
+                border = BorderStroke(1.dp, Slate300.copy(alpha = 0.42f)),
+                colors = ButtonDefaults.buttonColors(containerColor = Navy700.copy(alpha = 0.2f), contentColor = Slate100),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    actionLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Button(
+            onClick = onProfile,
+            modifier = Modifier.size(width = 52.dp, height = 42.dp),
+            shape = RoundedCornerShape(999.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Color.White),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+        ) {
+            Text(userInitials(session), fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
 private fun SessionIdentityCard(session: MobileSessionSummary, onSignOut: () -> Unit, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
@@ -811,6 +899,38 @@ private fun SessionIdentityCard(session: MobileSessionSummary, onSignOut: () -> 
             Button(
                 onClick = onSignOut,
                 shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Navy600, contentColor = Slate100),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Sign out")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileScreen(
+    session: MobileSessionSummary?,
+    apiBaseUrl: String,
+    onSignOut: () -> Unit
+) {
+    ShellCard {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionLabel(
+                title = "Profile",
+                subtitle = "Account and workspace connection for this device."
+            )
+            if (session != null) {
+                CompactInfoCard(title = "Name", value = session.name, modifier = Modifier.fillMaxWidth())
+                CompactInfoCard(title = "Role", value = session.role.replaceFirstChar { it.uppercase() }, modifier = Modifier.fillMaxWidth())
+                CompactInfoCard(title = "Email", value = session.email, modifier = Modifier.fillMaxWidth())
+            } else {
+                FeedbackInline(label = "No active mobile session.", accent = Amber300)
+            }
+            ApiCard(apiBaseUrl)
+            Button(
+                onClick = onSignOut,
+                shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Navy600, contentColor = Slate100),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -1032,6 +1152,96 @@ internal fun QueueOverviewCard(
 }
 
 @Composable
+internal fun StatusCounterCarousel(
+    totalOrders: Int,
+    statusCounts: Map<String, Int>,
+    selectedStatus: String?,
+    onSelectStatus: (String?) -> Unit
+) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(end = 4.dp)) {
+        item {
+            StatusCounterCard(
+                label = "Total",
+                count = totalOrders,
+                active = selectedStatus == null,
+                accent = Blue400,
+                onClick = { onSelectStatus(null) }
+            )
+        }
+        items(mobileStatusOrder) { status ->
+            StatusCounterCard(
+                label = statusLabel(status),
+                count = statusCounts[status] ?: 0,
+                active = selectedStatus == status,
+                accent = statusAccent(status),
+                onClick = { onSelectStatus(status) },
+                modifier = Modifier.testTag(MobileUiTags.statusChip(status))
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusCounterCard(
+    label: String,
+    count: Int,
+    active: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .size(width = 104.dp, height = 58.dp)
+            .clickable { onClick() }
+            .semantics {
+                role = Role.Button
+                stateDescription = if (active) "Selected" else "Not selected"
+            },
+        colors = CardDefaults.cardColors(containerColor = if (active) Navy500 else Navy700.copy(alpha = 0.82f)),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, if (active) Blue300.copy(alpha = 0.72f) else Slate300.copy(alpha = 0.18f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = Slate300, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(count.toString(), style = MaterialTheme.typography.titleMedium, color = accent, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+internal fun QueueToolbar(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onCreate: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            placeholder = { Text("Search code, title, customer") },
+            modifier = Modifier.weight(1f).testTag(MobileUiTags.SEARCH_INPUT),
+            singleLine = true
+        )
+        Button(
+            onClick = onCreate,
+            shape = RoundedCornerShape(18.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Blue400, contentColor = Navy900),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text("Create", fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
 internal fun CreateOrderCard(
     title: String,
     description: String,
@@ -1225,6 +1435,97 @@ internal fun CreateOrderCard(
 }
 
 @Composable
+internal fun CreateOrderScreen(
+    title: String,
+    description: String,
+    customerName: String,
+    isSubmitting: Boolean,
+    isEnabled: Boolean,
+    onTitleChange: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onCreate: () -> Unit,
+    onCancel: () -> Unit
+) {
+    ShellCard(modifier = Modifier.testTag(MobileUiTags.CREATE_CARD)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionLabel(
+                title = "New order",
+                subtitle = "New orders start in New."
+            )
+            CompactInfoCard(title = "Customer", value = customerName, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = title,
+                onValueChange = onTitleChange,
+                label = { Text("Order title") },
+                modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.CREATE_TITLE_INPUT).semantics {
+                    contentDescription = "Order title"
+                },
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = description,
+                onValueChange = onDescriptionChange,
+                label = { Text("Description") },
+                modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.CREATE_DESCRIPTION_INPUT).semantics {
+                    contentDescription = "Description"
+                },
+                minLines = 4
+            )
+            ShellCard {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Text("Preview", style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                        StatusBadge(label = "New", accent = Blue400)
+                    }
+                    Text(
+                        title.ifBlank { "Order title" },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "Will appear at the top of the queue.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate300
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    enabled = !isSubmitting && isEnabled && title.trim().length >= 3,
+                    onClick = onCreate,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Blue400,
+                        contentColor = Navy900,
+                        disabledContainerColor = Navy600,
+                        disabledContentColor = Slate300
+                    ),
+                    modifier = Modifier.weight(1f).testTag(MobileUiTags.CREATE_SUBMIT)
+                ) {
+                    Text(if (isSubmitting) "Creating..." else "Create order")
+                }
+                Button(
+                    enabled = !isSubmitting,
+                    onClick = onCancel,
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(1.dp, Slate300.copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Cancel")
+                }
+            }
+            if (!isEnabled) {
+                FeedbackInline(label = "Sign in before creating a new order", accent = Amber300)
+            }
+        }
+    }
+}
+
+@Composable
 private fun QueueSectionHeader(title: String, subtitle: String) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
@@ -1251,7 +1552,7 @@ internal fun ListControlsCard(
     ShellCard {
         BoxWithConstraints {
             val isCompact = maxWidth < 360.dp
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel(title = "Queue controls", subtitle = "Slice the queue fast when volume rises.")
                 OutlinedTextField(
                     value = searchQuery,
@@ -1345,93 +1646,78 @@ internal fun DetailScreenCard(
     allowedTransitions: List<String>,
     isSubmitting: Boolean,
     actionMessage: String?,
+    selectedTab: MobileDetailTab,
     commentBody: String,
     onCommentBodyChange: (String) -> Unit,
+    onSelectTab: (MobileDetailTab) -> Unit,
     onTransitionOrder: (String) -> Unit,
     onAddComment: () -> Unit,
-    onBack: () -> Unit,
     isOperator: Boolean
 ) {
     BoxWithConstraints {
         val isCompact = maxWidth < 360.dp
-        Column(modifier = Modifier.testTag(MobileUiTags.DETAIL_SCREEN), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        var statusMenuExpanded by remember { mutableStateOf(false) }
+        Column(modifier = Modifier.testTag(MobileUiTags.DETAIL_SCREEN), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Navy500),
-                shape = RoundedCornerShape(28.dp),
+                shape = RoundedCornerShape(24.dp),
                 border = BorderStroke(1.dp, Blue300.copy(alpha = 0.28f))
             ) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        onClick = onBack,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100)
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Back to queue")
+                        Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
+                        StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
                     }
-                    Text(detail.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
-                    Text(detail.title, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(
+                        detail.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     if (isCompact) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
-                            Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
-                        }
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             CompactInfoCard(
                                 title = "Customer",
                                 value = detail.customerName,
                                 modifier = Modifier.fillMaxWidth()
                             )
                             CompactInfoCard(
-                                title = "Comments",
-                                value = detail.comments.size.toString(),
+                                title = "Updated",
+                                value = compactTimestampLabel(detail.updatedAtLabel),
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
                     } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            StatusBadge(label = detail.statusLabel, accent = detail.statusColor)
-                            Text("Updated ${detail.updatedAtLabel}", style = MaterialTheme.typography.bodySmall, color = Slate200)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             CompactInfoCard(
                                 title = "Customer",
                                 value = detail.customerName,
                                 modifier = Modifier.weight(1f)
                             )
                             CompactInfoCard(
-                                title = "Comments",
-                                value = detail.comments.size.toString(),
+                                title = "Updated",
+                                value = compactTimestampLabel(detail.updatedAtLabel),
                                 modifier = Modifier.weight(1f)
                             )
                         }
                     }
-                    Text(detail.description, style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                }
-            }
-
-            if (actionMessage != null) {
-                FeedbackCard(
-                    title = "Latest action",
-                    body = actionMessage,
-                    accent = Mint400,
-                    surface = Navy700,
-                    eyebrow = "ACTION"
-                )
-            }
-
-            DetailSectionCard(title = "Next steps", subtitle = "Move the order through the allowed lifecycle only.") {
-                if (!isOperator) {
-                    Text("Customer mode is read-only for status changes.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
-                } else if (allowedTransitions.isEmpty()) {
-                    Text("This order is already in a terminal state.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        allowedTransitions.forEach { status ->
+                    if (actionMessage != null) {
+                        FeedbackInline(label = actionMessage, accent = Mint400)
+                    }
+                    if (isOperator && allowedTransitions.isNotEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth()) {
                             Button(
                                 enabled = !isSubmitting,
-                                onClick = { onTransitionOrder(status) },
-                                shape = RoundedCornerShape(18.dp),
+                                onClick = { statusMenuExpanded = true },
+                                shape = RoundedCornerShape(16.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Blue400,
                                     contentColor = Navy900,
@@ -1440,56 +1726,141 @@ internal fun DetailScreenCard(
                                 ),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(statusLabel(status))
+                                Text("Change status")
+                            }
+                            DropdownMenu(
+                                expanded = statusMenuExpanded,
+                                onDismissRequest = { statusMenuExpanded = false },
+                                containerColor = Navy900,
+                                tonalElevation = 8.dp,
+                                shadowElevation = 12.dp
+                            ) {
+                                allowedTransitions.forEach { status ->
+                                    DropdownMenuItem(
+                                        text = { Text(statusLabel(status), color = Color.White, fontWeight = FontWeight.SemiBold) },
+                                        onClick = {
+                                            statusMenuExpanded = false
+                                            onTransitionOrder(status)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
 
-            DetailSectionCard(title = "History", subtitle = "Most recent workflow events.") {
-                detail.history.takeLast(4).reversed().forEach { event ->
-                    TimelineEntry(event.summary, "${event.actorName} | ${event.changedAtLabel}", event.reason)
-                }
-            }
+            DetailTabRow(
+                selectedTab = selectedTab,
+                historyCount = detail.history.size,
+                commentCount = detail.comments.size,
+                onSelectTab = onSelectTab
+            )
 
-            DetailSectionCard(title = "Comments", subtitle = if (isOperator) "Leave a note for the next operator." else "Comments are available in operator mode.") {
-                if (isOperator) {
-                    Button(
-                        enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
-                        onClick = onAddComment,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Mint400,
-                            contentColor = Navy900,
-                            disabledContainerColor = Navy600,
-                            disabledContentColor = Slate300
-                        ),
-                        modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_SUBMIT)
-                    ) {
-                        Text(if (isSubmitting) "Sending..." else "Post comment")
+            when (selectedTab) {
+                MobileDetailTab.Overview -> DetailSectionCard(title = "Description", subtitle = "") {
+                    Text(detail.description, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                    if (!isOperator) {
+                        FeedbackInline(label = "Customer mode is read-only for status changes.", accent = Amber300)
+                    } else if (allowedTransitions.isEmpty()) {
+                        FeedbackInline(label = "This order is already in a terminal state.", accent = Mint400)
                     }
-                    OutlinedTextField(
-                        value = commentBody,
-                        onValueChange = onCommentBodyChange,
-                        label = { Text("Add operator note") },
-                        modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_INPUT).semantics {
-                            contentDescription = "Add operator note"
-                        },
-                        minLines = 2
-                    )
-                } else {
-                    FeedbackInline(label = "Sign in as an operator to leave queue notes", accent = Amber300)
                 }
-                if (detail.comments.isEmpty()) {
-                    Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
-                } else {
-                    detail.comments.reversed().forEach { comment ->
-                        TimelineEntry(comment.authorName, comment.createdAtLabel, comment.body)
+
+                MobileDetailTab.History -> DetailSectionCard(title = "History", subtitle = "Most recent workflow events.") {
+                    if (detail.history.isEmpty()) {
+                        Text("No history yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
+                    } else {
+                        detail.history.takeLast(8).reversed().forEach { event ->
+                            TimelineEntry(event.summary, "${event.actorName} | ${event.changedAtLabel}", event.reason)
+                        }
+                    }
+                }
+
+                MobileDetailTab.Comments -> DetailSectionCard(title = "Comments", subtitle = if (isOperator) "Leave a note for the next operator." else "Comments are available in operator mode.") {
+                    if (isOperator) {
+                        OutlinedTextField(
+                            value = commentBody,
+                            onValueChange = onCommentBodyChange,
+                            label = { Text("Add operator note") },
+                            modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_INPUT).semantics {
+                                contentDescription = "Add operator note"
+                            },
+                            minLines = 2
+                        )
+                        Button(
+                            enabled = !isSubmitting && commentBody.trim().isNotEmpty(),
+                            onClick = onAddComment,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Mint400,
+                                contentColor = Navy900,
+                                disabledContainerColor = Navy600,
+                                disabledContentColor = Slate300
+                            ),
+                            modifier = Modifier.fillMaxWidth().testTag(MobileUiTags.COMMENT_SUBMIT)
+                        ) {
+                            Text(if (isSubmitting) "Sending..." else "Post comment")
+                        }
+                    } else {
+                        FeedbackInline(label = "Sign in as an operator to leave queue notes", accent = Amber300)
+                    }
+                    if (detail.comments.isEmpty()) {
+                        Text("No comments yet.", style = MaterialTheme.typography.bodyMedium, color = Slate200)
+                    } else {
+                        detail.comments.reversed().forEach { comment ->
+                            TimelineEntry(comment.authorName, comment.createdAtLabel, comment.body)
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DetailTabRow(
+    selectedTab: MobileDetailTab,
+    historyCount: Int,
+    commentCount: Int,
+    onSelectTab: (MobileDetailTab) -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        DetailTabButton(
+            label = "Overview",
+            active = selectedTab == MobileDetailTab.Overview,
+            onClick = { onSelectTab(MobileDetailTab.Overview) },
+            modifier = Modifier.weight(1f)
+        )
+        DetailTabButton(
+            label = "History $historyCount",
+            active = selectedTab == MobileDetailTab.History,
+            onClick = { onSelectTab(MobileDetailTab.History) },
+            modifier = Modifier.weight(1f)
+        )
+        DetailTabButton(
+            label = "Comments $commentCount",
+            active = selectedTab == MobileDetailTab.Comments,
+            onClick = { onSelectTab(MobileDetailTab.Comments) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun DetailTabButton(label: String, active: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.semantics { stateDescription = if (active) "Selected" else "Not selected" },
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, if (active) Blue300.copy(alpha = 0.62f) else Slate300.copy(alpha = 0.18f)),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (active) Blue400.copy(alpha = 0.22f) else Navy700,
+            contentColor = if (active) Color.White else Slate200
+        ),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+    ) {
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -1568,6 +1939,47 @@ internal fun EmptyQueueCard(title: String, body: String, eyebrow: String, accent
 }
 
 @Composable
+internal fun SelectedOrderTray(order: MobileOrderSummary, onOpen: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Navy900.copy(alpha = 0.94f)),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, Blue300.copy(alpha = 0.32f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    "${order.code} selected",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    order.title,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Slate300,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Button(
+                onClick = onOpen,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100)
+            ) {
+                Text("Open")
+            }
+        }
+    }
+}
+
+@Composable
 internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectOrder: (String) -> Unit) {
     Card(
         modifier = Modifier
@@ -1581,21 +1993,14 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
             .clickable { onSelectOrder(order.id) },
         colors = CardDefaults.cardColors(containerColor = if (isSelected) Navy500 else Navy700),
         shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, if (isSelected) Blue300.copy(alpha = 0.55f) else Slate300.copy(alpha = 0.18f))
+        border = BorderStroke(1.dp, if (isSelected) Blue300.copy(alpha = 0.78f) else Slate300.copy(alpha = 0.18f))
     ) {
         BoxWithConstraints {
             val isCompact = maxWidth < 360.dp
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (isCompact) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                if (isSelected) "Ready in focus lane" else "Tap to open details",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) Mint400 else Slate300
-                            )
-                        }
+                        Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
                         StatusBadge(label = order.statusLabel, accent = order.statusColor)
                     }
                 } else {
@@ -1606,18 +2011,13 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
                             Text(order.code, style = MaterialTheme.typography.labelLarge, color = Blue300, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                if (isSelected) "Ready in focus lane" else "Tap to open details",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) Mint400 else Slate300
-                            )
                         }
                         StatusBadge(label = order.statusLabel, accent = order.statusColor)
                     }
                 }
                 Text(
                     order.title,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
@@ -1637,7 +2037,7 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
                         )
                     }
                 } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         CompactMetaPill(
                             label = "Customer",
                             value = order.customerName,
@@ -1649,9 +2049,6 @@ internal fun OrderCard(order: MobileOrderSummary, isSelected: Boolean, onSelectO
                             modifier = Modifier.weight(1f)
                         )
                     }
-                }
-                if (isSelected) {
-                    FeedbackInline(label = "Selected for detail view", accent = Mint400)
                 }
             }
         }
@@ -1694,8 +2091,12 @@ private fun FeedbackCard(title: String, body: String, accent: Color, surface: Co
 @Composable
 private fun DetailSectionCard(title: String, subtitle: String, content: @Composable () -> Unit) {
     ShellCard {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SectionLabel(title = title, subtitle = subtitle)
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (subtitle.isBlank()) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold)
+            } else {
+                SectionLabel(title = title, subtitle = subtitle)
+            }
             content()
         }
     }
@@ -1742,7 +2143,7 @@ private fun CompactInfoCard(title: String, value: String, modifier: Modifier = M
         colors = CardDefaults.cardColors(containerColor = Navy700.copy(alpha = 0.82f)),
         shape = RoundedCornerShape(20.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(title, style = MaterialTheme.typography.labelSmall, color = Slate300)
             Text(value, style = MaterialTheme.typography.titleMedium, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -1756,7 +2157,7 @@ private fun CompactMetaPill(label: String, value: String, modifier: Modifier = M
         colors = CardDefaults.cardColors(containerColor = Navy900.copy(alpha = 0.24f)),
         shape = RoundedCornerShape(18.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = Slate300)
             Text(value, style = MaterialTheme.typography.bodySmall, color = Slate100, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
@@ -1817,9 +2218,48 @@ private fun statusLabel(status: String): String = status.split("_").joinToString
     it.replaceFirstChar { character -> character.uppercase() }
 }
 
+private val mobileStatusOrder = listOf("new", "in_review", "approved", "rejected", "fulfilled", "cancelled")
+
+private fun statusAccent(status: String): Color = when (status) {
+    "new" -> Blue400
+    "in_review" -> Amber300
+    "approved", "fulfilled" -> Mint400
+    "rejected" -> Red300
+    "cancelled" -> Slate300
+    else -> Slate100
+}
+
 private fun compactTimestampLabel(label: String): String {
     val parts = label.split(",").map { it.trim() }
     return if (parts.size >= 3) "${parts[0]}, ${parts[2]}" else label
+}
+
+private fun mobileSyncLabel(syncState: MobileSyncState): String {
+    return syncState.lastSuccessfulRefreshLabel
+        ?.split(",")
+        ?.lastOrNull()
+        ?.trim()
+        ?.replace(" AM", "")
+        ?.replace(" PM", "")
+        ?.replace("\u202FAM", "")
+        ?.replace("\u202FPM", "")
+        ?: "now"
+}
+
+private fun userInitials(session: MobileSessionSummary?): String {
+    val nameParts = session?.name
+        ?.split(" ")
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        .orEmpty()
+
+    val initials = nameParts
+        .take(2)
+        .joinToString("") { it.first().uppercase() }
+
+    return initials.ifBlank {
+        session?.email?.firstOrNull()?.uppercase() ?: "SF"
+    }
 }
 
 private fun sortOptionLabel(option: MobileOrderSortOption): String = when (option) {
