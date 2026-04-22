@@ -422,7 +422,7 @@ function getStatusCard(label: string) {
   }
 
   const statusLabel = within(summaryStrip as HTMLElement).getByText(label);
-  const card = statusLabel.closest("article");
+  const card = statusLabel.closest("button");
 
   if (!card) {
     throw new Error(`Unable to find status card for ${label}`);
@@ -450,10 +450,11 @@ describe("App", () => {
       email: "operator@example.com",
       password: "operator123"
     },
-    expectedHeading = "Operate the live workflow"
+    expectedHeading = "Active orders"
   ) {
     render(<App />);
 
+    await user.click(screen.getByRole("button", { name: "Sign in with email instead" }));
     await user.clear(screen.getByLabelText("Email"));
     await user.type(screen.getByLabelText("Email"), credentials.email);
     await user.clear(screen.getByLabelText("Password"));
@@ -464,14 +465,30 @@ describe("App", () => {
     return user;
   }
 
-  async function selectOrder(user: ReturnType<typeof userEvent.setup>, title: string) {
-    const rowTitle = await screen.findByRole("cell", { name: title });
+  async function findRowByTitle(title: string) {
+    const tableBody = document.querySelector(".orders-table tbody");
+
+    if (!tableBody) {
+      throw new Error("Unable to find orders table body");
+    }
+
+    const rowTitle = await within(tableBody as HTMLElement).findByText(title);
     const row = rowTitle.closest("tr");
 
     if (!row) {
       throw new Error(`Unable to find table row for ${title}`);
     }
 
+    return row;
+  }
+
+  function queryRowTitle(title: string) {
+    const tableBody = document.querySelector(".orders-table tbody");
+    return tableBody ? within(tableBody as HTMLElement).queryByText(title) : null;
+  }
+
+  async function selectOrder(user: ReturnType<typeof userEvent.setup>, title: string) {
+    const row = await findRowByTitle(title);
     await user.click(row);
   }
 
@@ -486,17 +503,16 @@ describe("App", () => {
     expect(within(getStatusCard("Cancelled")).getByText("0")).toBeInTheDocument();
   });
 
-  it("opens and closes the status filter dropdown on outside click", async () => {
+  it("filters by status through the summary counters", async () => {
     const user = await signIn();
 
-    await user.click(screen.getByRole("button", { name: "Filter" }));
-    expect(screen.getByLabelText("Cancelled")).toBeInTheDocument();
+    await user.click(getStatusCard("In review"));
+    expect(await findRowByTitle("Verify warranty documents")).toBeInTheDocument();
+    expect(queryRowTitle("Replace display unit")).not.toBeInTheDocument();
 
-    await user.click(document.body);
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText("Cancelled")).not.toBeInTheDocument();
-    });
+    await user.click(getStatusCard("Total"));
+    expect(await findRowByTitle("Replace display unit")).toBeInTheDocument();
+    expect(await findRowByTitle("Prepare approved shipment")).toBeInTheDocument();
   });
 
   it("filters the visible queue by code, title, and customer name", async () => {
@@ -504,23 +520,23 @@ describe("App", () => {
 
     await user.type(screen.getByLabelText("Search queue"), "SF-1002");
 
-    expect(screen.getByRole("cell", { name: "Verify warranty documents" })).toBeInTheDocument();
-    expect(screen.queryByRole("cell", { name: "Replace display unit" })).not.toBeInTheDocument();
+    expect(await findRowByTitle("Verify warranty documents")).toBeInTheDocument();
+    expect(queryRowTitle("Replace display unit")).not.toBeInTheDocument();
     expect(screen.getByText(/Showing 1.*1 of 1 orders?/)).toBeInTheDocument();
 
     await user.clear(screen.getByLabelText("Search queue"));
     await user.type(screen.getByLabelText("Search queue"), "shipment");
 
-    expect(screen.getByRole("cell", { name: "Prepare approved shipment" })).toBeInTheDocument();
-    expect(screen.queryByRole("cell", { name: "Replace display unit" })).not.toBeInTheDocument();
+    expect(await findRowByTitle("Prepare approved shipment")).toBeInTheDocument();
+    expect(queryRowTitle("Replace display unit")).not.toBeInTheDocument();
     expect(screen.getByText(/Showing 1.*1 of 1 orders?/)).toBeInTheDocument();
 
     await user.clear(screen.getByLabelText("Search queue"));
     await user.type(screen.getByLabelText("Search queue"), "alex morgan");
 
-    expect(screen.getByRole("cell", { name: "Replace display unit" })).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "Verify warranty documents" })).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "Prepare approved shipment" })).toBeInTheDocument();
+    expect(await findRowByTitle("Replace display unit")).toBeInTheDocument();
+    expect(await findRowByTitle("Verify warranty documents")).toBeInTheDocument();
+    expect(await findRowByTitle("Prepare approved shipment")).toBeInTheDocument();
     expect(screen.getByText(/Showing 1.*3 of 3 orders?/)).toBeInTheDocument();
   });
 
@@ -533,7 +549,7 @@ describe("App", () => {
 
     const ordersRequestsBeforeRefresh = countRequests(fetchMock, "/orders");
 
-    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await user.click(screen.getByRole("button", { name: "Refresh orders" }));
 
     await waitFor(() => {
       expect(countRequests(fetchMock, "/orders")).toBeGreaterThan(ordersRequestsBeforeRefresh);
@@ -551,7 +567,7 @@ describe("App", () => {
     const ordersRequestsBeforeRefresh = countRequests(fetchMock, "/orders");
     const detailRequestsBeforeRefresh = countRequestsMatching(fetchMock, /^\/orders\/order-2$/);
 
-    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await user.click(screen.getByRole("button", { name: "Refresh orders" }));
 
     await waitFor(() => {
       expect(countRequests(fetchMock, "/orders")).toBeGreaterThan(ordersRequestsBeforeRefresh);
@@ -570,7 +586,7 @@ describe("App", () => {
 
     fetchMock = installFetchMock(baseOrders(), { failingOrdersGetCount: 1 });
 
-    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await user.click(screen.getByRole("button", { name: "Refresh orders" }));
 
     await screen.findByText("Showing the last successful queue state.");
     expect(screen.getByText(/Showing the last successful queue state\./)).toBeInTheDocument();
@@ -582,12 +598,13 @@ describe("App", () => {
     const user = userEvent.setup();
     const firstRender = render(<App />);
 
+    await user.click(screen.getByRole("button", { name: "Sign in with email instead" }));
     await user.clear(screen.getByLabelText("Email"));
     await user.type(screen.getByLabelText("Email"), "operator@example.com");
     await user.clear(screen.getByLabelText("Password"));
     await user.type(screen.getByLabelText("Password"), "operator123");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
-    await screen.findByRole("heading", { name: "Operate the live workflow" });
+    await screen.findByRole("heading", { name: "Active orders" });
     await selectOrder(user, "Verify warranty documents");
     await screen.findByRole("heading", { name: "Verify warranty documents" });
 
@@ -619,7 +636,7 @@ describe("App", () => {
     expect(screen.getByText(/Connection is unavailable/)).toBeInTheDocument();
 
     fetchMock = installFetchMock(baseOrders());
-    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await user.click(screen.getByRole("button", { name: "Refresh orders" }));
 
     await screen.findByText("Queued changes synced.");
     expect(screen.queryByText("1 queued change waiting to sync.")).not.toBeInTheDocument();
@@ -630,20 +647,22 @@ describe("App", () => {
     const user = await signIn();
 
     await selectOrder(user, "Replace display unit");
+    await user.click(screen.getByRole("tab", { name: /Comments/ }));
     await screen.findByText("Initial operator note.");
 
     fetchMock = installFetchMock(baseOrders(), {
       networkFailureRules: [{ method: "POST", pathPattern: /^\/orders\/order-1\/comments$/, times: 1 }]
     });
 
-    await user.type(screen.getByLabelText("Add comment"), "Queued comment from offline mode");
-    await user.click(screen.getByRole("button", { name: "Post comment" }));
+    await user.click(screen.getByRole("tab", { name: /Comments/ }));
+    await user.type(screen.getByLabelText("Add a comment"), "Queued comment from offline mode");
+    await user.click(screen.getByRole("button", { name: "Add comment" }));
 
     await screen.findByText("Queued comment from offline mode");
     expect(screen.getByText("1 queued change waiting to sync.")).toBeInTheDocument();
 
     fetchMock = installFetchMock(baseOrders());
-    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await user.click(screen.getByRole("button", { name: "Refresh orders" }));
 
     await screen.findByText("Queued changes synced.");
     expect(screen.getByText("Queued comment from offline mode")).toBeInTheDocument();
@@ -652,18 +671,13 @@ describe("App", () => {
   it("queues status transitions offline and replays them on refresh", async () => {
     const user = await signIn();
 
-    const rowTitle = await screen.findByRole("cell", { name: "Replace display unit" });
-    const row = rowTitle.closest("tr");
-
-    if (!row) {
-      throw new Error("Unable to find table row for Replace display unit");
-    }
+    const row = await findRowByTitle("Replace display unit");
 
     fetchMock = installFetchMock(baseOrders(), {
       networkFailureRules: [{ method: "POST", pathPattern: /^\/orders\/order-1\/status-transitions$/, times: 1 }]
     });
 
-    await user.click(within(row).getByRole("button", { name: "Change status" }));
+    await user.click(screen.getByRole("button", { name: "Change status" }));
     await user.click(screen.getByRole("button", { name: "In review" }));
 
     await waitFor(() => {
@@ -672,7 +686,7 @@ describe("App", () => {
     expect(screen.getByText("1 queued change waiting to sync.")).toBeInTheDocument();
 
     fetchMock = installFetchMock(baseOrders());
-    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await user.click(screen.getByRole("button", { name: "Refresh orders" }));
 
     await screen.findByText("Queued changes synced.");
     expect(within(row).getByText("In review")).toBeInTheDocument();
@@ -682,7 +696,7 @@ describe("App", () => {
     const user = await signIn(userEvent.setup(), {
       email: "customer@example.com",
       password: "customer123"
-    }, "Track the live workflow");
+    }, "My orders");
 
     expect(screen.queryByRole("heading", { name: "Operator access required" })).not.toBeInTheDocument();
 
@@ -691,22 +705,16 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Description"), "Customer captured the issue from the portal.");
     await user.click(screen.getByRole("button", { name: /^Create order$/ }));
 
-    await screen.findByRole("cell", { name: "Customer raised replacement request" });
+    await findRowByTitle("Customer raised replacement request");
 
-    const rowTitle = await screen.findByRole("cell", { name: "Replace display unit" });
-    const row = rowTitle.closest("tr");
-
-    if (!row) {
-      throw new Error("Unable to find table row for Replace display unit");
-    }
-
-    expect(within(row).getByText("Operator only")).toBeInTheDocument();
+    const row = await findRowByTitle("Replace display unit");
 
     await user.click(row);
 
-    await screen.findByText("Recent status movement");
-    expect(screen.getByText("Comments are available in operator mode.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Post comment" })).not.toBeInTheDocument();
+    await screen.findByText("Contact support if this request needs a correction or a faster update.");
+    await user.click(screen.getByRole("tab", { name: /Messages/ }));
+    expect(screen.getByText(/No customer messages yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add comment" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Change status" })).not.toBeInTheDocument();
   });
 
@@ -715,22 +723,14 @@ describe("App", () => {
 
     const user = await signIn();
 
-    await screen.findByText("Selected order is unavailable.");
-    expect(screen.getByText(/API returned 500/)).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "Replace display unit" })).toBeInTheDocument();
+    await screen.findByText("This order may have been removed.");
+    expect(screen.getByText("Refresh the queue or pick another order.")).toBeInTheDocument();
+    expect(await findRowByTitle("Replace display unit")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Clear selection" }));
-    await screen.findByText("Select an order to inspect.");
-
-    const brokenRowTitle = await screen.findByRole("cell", { name: "Replace display unit" });
-    const brokenRow = brokenRowTitle.closest("tr");
-
-    if (!brokenRow) {
-      throw new Error("Unable to find table row for Replace display unit");
-    }
+    const brokenRow = await findRowByTitle("Replace display unit");
 
     await user.click(brokenRow);
-    await screen.findByText("Selected order is unavailable.");
+    await screen.findByText("This order may have been removed.");
 
     await user.click(screen.getByRole("button", { name: "Open SF-1002" }));
     await screen.findByRole("heading", { name: "Verify warranty documents" });
@@ -742,8 +742,8 @@ describe("App", () => {
 
     const user = await signIn();
 
-    await screen.findByText("Selected order is unavailable.");
-    const recoveryCard = screen.getByText("Selected order is unavailable.").closest("article");
+    await screen.findByText("This order may have been removed.");
+    const recoveryCard = screen.getByText("This order may have been removed.").closest("article");
 
     if (!recoveryCard) {
       throw new Error("Unable to find detail recovery card");
@@ -753,6 +753,7 @@ describe("App", () => {
 
     await screen.findByRole("heading", { name: "Replace display unit" });
     expect(screen.queryByText("Selected order is unavailable.")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Comments/ }));
     expect(screen.getByText("Initial operator note.")).toBeInTheDocument();
   });
 
@@ -767,21 +768,16 @@ describe("App", () => {
     );
     await user.click(screen.getByRole("button", { name: /^Create order$/ }));
 
-    await screen.findByRole("cell", { name: "Inspect return shipment" });
+    await findRowByTitle("Inspect return shipment");
     expect(within(getStatusCard("New")).getByText("2")).toBeInTheDocument();
   });
 
   it("opens and closes row status actions, then updates the visible status", async () => {
     const user = await signIn();
 
-    const rowTitle = await screen.findByRole("cell", { name: "Replace display unit" });
-    const row = rowTitle.closest("tr");
+    const row = await findRowByTitle("Replace display unit");
 
-    if (!row) {
-      throw new Error("Unable to find table row for Replace display unit");
-    }
-
-    await user.click(within(row).getByRole("button", { name: "Change status" }));
+    await user.click(screen.getByRole("button", { name: "Change status" }));
     expect(screen.getByRole("button", { name: "In review" })).toBeInTheDocument();
 
     await user.click(document.body);
@@ -790,7 +786,7 @@ describe("App", () => {
       expect(screen.queryByRole("button", { name: "In review" })).not.toBeInTheDocument();
     });
 
-    await user.click(within(row).getByRole("button", { name: "Change status" }));
+    await user.click(screen.getByRole("button", { name: "Change status" }));
     await user.click(screen.getByRole("button", { name: "In review" }));
 
     await waitFor(() => {
@@ -801,21 +797,17 @@ describe("App", () => {
   it("shows order history and posts a new comment in the inspector", async () => {
     const user = await signIn();
 
-    const rowTitle = await screen.findByRole("cell", { name: "Replace display unit" });
-    const row = rowTitle.closest("tr");
-
-    if (!row) {
-      throw new Error("Unable to find table row for Replace display unit");
-    }
+    const row = await findRowByTitle("Replace display unit");
 
     await user.click(row);
 
-    await screen.findByText("Recent status movement");
-    expect(screen.getByText("Initial operator note.")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /History/ }));
     expect(screen.getByText("Created in New")).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("Add comment"), "Follow-up note from the test");
-    await user.click(screen.getByRole("button", { name: "Post comment" }));
+    await user.click(screen.getByRole("tab", { name: /Comments/ }));
+    expect(screen.getByText("Initial operator note.")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Add a comment"), "Follow-up note from the test");
+    await user.click(screen.getByRole("button", { name: "Add comment" }));
 
     await screen.findByText("Follow-up note from the test");
   });

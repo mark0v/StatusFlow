@@ -176,20 +176,19 @@ describe("App customer regression coverage", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    await user.click(screen.getByRole("button", { name: "Sign in with email instead" }));
     await user.clear(screen.getByLabelText("Email"));
     await user.type(screen.getByLabelText("Email"), "customer@example.com");
     await user.clear(screen.getByLabelText("Password"));
     await user.type(screen.getByLabelText("Password"), "customer123");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    await screen.findByRole("heading", { name: "Track the live workflow" });
-    await screen.findByRole("heading", { name: "Track your orders across the live workflow" });
+    await screen.findByRole("heading", { name: "My orders" });
 
-    expect(screen.queryByRole("heading", { name: "Operate the live workflow" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Review and move orders forward" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Queue notes" })).toBeInTheDocument();
-    expect(screen.getByText("Comments are available in operator mode.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Active orders" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Messages/ }));
+    expect(screen.getByText(/No customer messages yet/)).toBeInTheDocument();
     expect(screen.queryByText("Initial operator note.")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Post comment" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add comment" })).not.toBeInTheDocument();
   });
 });
