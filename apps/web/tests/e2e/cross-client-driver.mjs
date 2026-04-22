@@ -48,12 +48,11 @@ function getStatusLabel(status) {
 
 async function signIn(page, baseUrl) {
   await page.goto(baseUrl);
+  await page.getByRole("button", { name: "Sign in with email instead" }).click();
   await page.getByLabel("Email").fill("operator@example.com");
   await page.getByLabel("Password").fill("operator123");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByText("Operate the live workflow")).toBeVisible();
-  // Wait for the dashboard to be ready (table or search field)
-  await page.waitForTimeout(2000);
+  await expect(page.getByRole("heading", { name: "Active orders" })).toBeVisible();
 }
 
 async function createAndMutateOrder(page, title, description, comment, statusLabel) {
@@ -65,14 +64,14 @@ async function createAndMutateOrder(page, title, description, comment, statusLab
   const createdRow = page.locator("tbody tr").filter({ hasText: title }).first();
   await expect(createdRow).toBeVisible();
 
-  await createdRow.getByRole("button", { name: "Change status" }).click();
-  await page.getByRole("button", { name: statusLabel }).click();
+  await createdRow.click();
+  await page.getByRole("button", { name: "Change status" }).click();
+  await page.locator(".row-dropdown").getByRole("button", { name: statusLabel }).click();
   await expect(createdRow).toContainText(statusLabel);
 
-  await createdRow.click();
-  await expect(page.getByText("Comments and workflow history")).toBeVisible();
-  await page.getByLabel("Add comment").fill(comment);
-  await page.getByRole("button", { name: "Post comment" }).click();
+  await page.getByRole("tab", { name: /Comments/ }).click();
+  await page.getByLabel("Add a comment").fill(comment);
+  await page.getByRole("button", { name: "Add comment" }).click();
   await expect(page.getByText(comment)).toBeVisible();
 }
 
@@ -88,7 +87,7 @@ async function verifyOrder(page, title, comment, statusLabel) {
   await expect(matchingRow).toContainText(statusLabel);
 
   await matchingRow.click();
-  await expect(page.getByText("Comments and workflow history")).toBeVisible();
+  await page.getByRole("tab", { name: /Comments/ }).click();
   await expect(page.getByText(comment)).toBeVisible();
 }
 
