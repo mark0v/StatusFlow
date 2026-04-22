@@ -4,10 +4,11 @@ const uniqueSuffix = () => `${Date.now()}-${Math.random().toString(36).slice(2, 
 
 async function signIn(page: Page) {
   await page.goto("/");
+  await page.getByRole("button", { name: "Sign in with email instead" }).click();
   await page.getByLabel("Email").fill("operator@example.com");
   await page.getByLabel("Password").fill("operator123");
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByText("Operate the live workflow")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Active orders" })).toBeVisible();
 }
 
 test.describe("StatusFlow operator console", () => {
@@ -29,21 +30,23 @@ test.describe("StatusFlow operator console", () => {
     await signIn(page);
 
     await expect(page.getByAltText("StatusFlow operator console")).toBeVisible();
-    await expect(page.getByText("Cancelled").locator("..")).toContainText("0");
+    await expect(page.locator(".summary-strip .status-card").filter({ hasText: "Cancelled" })).toBeVisible();
 
     const summaryCards = page.locator(".summary-strip .status-card");
-    await expect(summaryCards).toHaveCount(6);
+    await expect(summaryCards).toHaveCount(7);
   });
 
-  test("closes the status filter when clicking outside", async ({ page }) => {
+  test("filters the queue through status summary cards", async ({ page }) => {
     await signIn(page);
 
-    const filterButton = page.getByRole("button", { name: "Filter" });
-    await filterButton.click();
+    await page.locator(".summary-strip .status-card").filter({ hasText: "In review" }).click();
 
-    await expect(page.getByLabel("Cancelled")).toBeVisible();
-    await page.mouse.click(20, 20);
-    await expect(page.getByLabel("Cancelled")).toBeHidden();
+    await expect(page.locator("tbody tr").first()).toContainText("In review");
+    await expect(page.locator("tbody tr").filter({ hasNotText: "In review" })).toHaveCount(0);
+
+    await page.locator(".summary-strip .status-card").filter({ hasText: "Total" }).click();
+
+    await expect(page.locator("tbody tr").first()).toBeVisible();
   });
 
   test("creates an order and transitions it to in review", async ({ page }) => {
@@ -62,8 +65,9 @@ test.describe("StatusFlow operator console", () => {
     await expect(createdRow).toBeVisible();
     await expect(createdRow).toContainText("New");
 
-    await createdRow.getByRole("button", { name: "Change status" }).click();
-    await page.getByRole("button", { name: "In review" }).click();
+    await createdRow.click();
+    await page.getByRole("button", { name: "Change status" }).click();
+    await page.locator(".row-dropdown").getByRole("button", { name: "In review" }).click();
 
     await expect(createdRow).toContainText("In review");
   });
@@ -83,20 +87,22 @@ test.describe("StatusFlow operator console", () => {
     await expect(createdRow).toBeVisible();
 
     await createdRow.click();
-    await expect(page.getByText("Comments and workflow history")).toBeVisible();
+    await page.getByRole("tab", { name: /History/ }).click();
     await expect(page.getByText("Created in New")).toBeVisible();
 
-    await page.getByLabel("Add comment").fill(commentBody);
-    await page.getByRole("button", { name: "Post comment" }).click();
+    await page.getByRole("tab", { name: /Comments/ }).click();
+    await page.getByLabel("Add a comment").fill(commentBody);
+    await page.getByRole("button", { name: "Add comment" }).click();
 
     await expect(page.getByText(commentBody)).toBeVisible();
   });
 
-  test("closes row status actions when clicking outside", async ({ page }) => {
+  test("closes inspector status actions when clicking outside", async ({ page }) => {
     await signIn(page);
 
     const firstRow = page.locator("tbody tr").first();
-    await firstRow.getByRole("button", { name: "Change status" }).click();
+    await firstRow.click();
+    await page.getByRole("button", { name: "Change status" }).click();
 
     const actionMenu = page.locator(".row-dropdown").first();
     await expect(actionMenu).toBeVisible();
