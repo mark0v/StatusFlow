@@ -124,6 +124,8 @@ data class MobileHomeUiState(
 
 internal enum class MobileOrderSortOption { UPDATED_DESC, UPDATED_ASC, TITLE_ASC, STATUS_ASC }
 
+private enum class MobileScreenMode { Queue, Detail, Create }
+
 object MobileUiTags {
     const val LOGIN_CARD = "login_card"
     const val LOGIN_EMAIL_INPUT = "login_email_input"
@@ -491,17 +493,17 @@ fun MobileHomeScreen(
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var commentBody by remember { mutableStateOf("") }
-    var isShowingDetail by rememberSaveable { mutableStateOf(false) }
-    var isCreateExpanded by rememberSaveable { mutableStateOf(false) }
+    var screenModeName by rememberSaveable { mutableStateOf(MobileScreenMode.Queue.name) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var sortOptionName by rememberSaveable { mutableStateOf(MobileOrderSortOption.UPDATED_DESC.name) }
+    val screenMode = MobileScreenMode.valueOf(screenModeName)
     val sortOption = MobileOrderSortOption.valueOf(sortOptionName)
 
     // Auto-show detail when order is pre-selected via debug intent
     LaunchedEffect(state.selectedOrderDetail) {
-        if (state.selectedOrderDetail != null && !isShowingDetail) {
-            isShowingDetail = true
+        if (state.selectedOrderDetail != null && screenMode == MobileScreenMode.Queue) {
+            screenModeName = MobileScreenMode.Detail.name
         }
     }
 
@@ -525,6 +527,10 @@ fun MobileHomeScreen(
                     MobileOrderSortOption.STATUS_ASC -> orders.sortedWith(compareBy<MobileOrderSummary> { statusLabel(it.rawStatus) }.thenBy { it.title.lowercase() })
                 }
             }
+    }
+
+    val selectedOrderSummary = state.selectedOrderId?.let { selectedId ->
+        state.orders.firstOrNull { it.id == selectedId }
     }
 
     Scaffold { padding ->
@@ -628,99 +634,139 @@ fun MobileHomeScreen(
                                 }
                             }
                             else -> {
-                                if (isShowingDetail && state.selectedOrderId != null) {
-                                    item {
-                                        QueueSectionHeader(
-                                            title = if (state.selectedOrderDetail != null) "Selected order" else "Order detail",
-                                            subtitle = if (state.selectedOrderDetail != null) {
-                                                if (state.isOperator) "Review details, update status, and leave context for the next operator."
-                                                else "Review the order timeline and track the latest status from your phone."
-                                            } else {
-                                                "Recover gracefully when a selected order is temporarily unavailable."
-                                            }
-                                        )
-                                    }
-                                    item {
-                                        if (state.selectedOrderDetail != null) {
-                                            DetailScreenCard(
-                                                detail = state.selectedOrderDetail,
-                                                allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
-                                                isSubmitting = state.isSubmitting,
-                                                actionMessage = state.actionMessage,
-                                                commentBody = commentBody,
-                                                onCommentBodyChange = { commentBody = it },
-                                                onTransitionOrder = onTransitionOrder,
-                                                onAddComment = { onAddComment(commentBody.trim()) },
-                                                onBack = { isShowingDetail = false },
-                                                isOperator = state.isOperator
-                                            )
-                                        } else {
-                                            DetailUnavailableCard(
-                                                errorMessage = state.errorMessage,
-                                                onBack = { isShowingDetail = false },
-                                                onRefresh = onRefresh
-                                            )
-                                        }
-                                    }
-                                } else {
-                                    item {
-                                        QueueSectionHeader(
-                                            title = "Active queue",
-                                            subtitle = "Tap any card to move from scan mode into detail mode."
-                                        )
-                                    }
-                                    if (visibleOrders.isEmpty()) {
+                                when (screenMode) {
+                                    MobileScreenMode.Detail -> {
                                         item {
-                                            EmptyQueueCard(
-                                                title = if (state.orders.isEmpty()) "No orders yet" else "No orders match your current view",
-                                                body = if (state.orders.isEmpty()) {
-                                                    "Create the first order from this screen or pull down to refresh when the backend receives new work."
+                                            QueueSectionHeader(
+                                                title = if (state.selectedOrderDetail != null) "Selected order" else "Order detail",
+                                                subtitle = if (state.selectedOrderDetail != null) {
+                                                    if (state.isOperator) "Review details, update status, and leave context for the next operator."
+                                                    else "Review the order timeline and track the latest status from your phone."
                                                 } else {
-                                                    "Try clearing the current filter, editing the search text, or changing the sort to inspect a different slice of the queue."
-                                                },
-                                                eyebrow = if (state.orders.isEmpty()) "EMPTY QUEUE" else "FILTERED VIEW",
-                                                accent = if (state.orders.isEmpty()) Blue300 else Amber300
-                                            )
-                                        }
-                                    } else {
-                                        items(visibleOrders) { item ->
-                                            OrderCard(
-                                                order = item,
-                                                isSelected = state.selectedOrderId == item.id,
-                                                onSelectOrder = {
-                                                    onSelectOrder(it)
-                                                    isShowingDetail = true
+                                                    "Recover gracefully when a selected order is temporarily unavailable."
                                                 }
                                             )
+                                        }
+                                        item {
+                                            if (state.selectedOrderDetail != null) {
+                                                DetailScreenCard(
+                                                    detail = state.selectedOrderDetail,
+                                                    allowedTransitions = state.allowedTransitions[state.selectedOrderDetail.rawStatus].orEmpty(),
+                                                    isSubmitting = state.isSubmitting,
+                                                    actionMessage = state.actionMessage,
+                                                    commentBody = commentBody,
+                                                    onCommentBodyChange = { commentBody = it },
+                                                    onTransitionOrder = onTransitionOrder,
+                                                    onAddComment = { onAddComment(commentBody.trim()) },
+                                                    onBack = { screenModeName = MobileScreenMode.Queue.name },
+                                                    isOperator = state.isOperator
+                                                )
+                                            } else {
+                                                DetailUnavailableCard(
+                                                    errorMessage = state.errorMessage,
+                                                    onBack = { screenModeName = MobileScreenMode.Queue.name },
+                                                    onRefresh = onRefresh
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    MobileScreenMode.Create -> {
+                                        item {
+                                            QueueSectionHeader(
+                                                title = "New order",
+                                                subtitle = "Capture the work item, then return to the queue."
+                                            )
+                                        }
+                                        item {
+                                            CreateOrderCard(
+                                                title = title,
+                                                description = description,
+                                                isExpanded = true,
+                                                isSubmitting = state.isSubmitting,
+                                                isLoading = state.isLoading || state.isRefreshing,
+                                                isEnabled = state.canCreateOrders,
+                                                helperText = if (state.isOperator) {
+                                                    "Operator mode can still capture new work into the shared queue."
+                                                } else {
+                                                    "Customer mode submits directly into the same shared queue."
+                                                },
+                                                onTitleChange = { title = it },
+                                                onDescriptionChange = { description = it },
+                                                onCreate = {
+                                                    onCreateOrder(title.trim(), description.trim())
+                                                    title = ""
+                                                    description = ""
+                                                    screenModeName = MobileScreenMode.Queue.name
+                                                },
+                                                onRefresh = onRefresh,
+                                                onToggleExpanded = { screenModeName = MobileScreenMode.Queue.name }
+                                            )
+                                        }
+                                    }
+
+                                    MobileScreenMode.Queue -> {
+                                        item {
+                                            QueueSectionHeader(
+                                                title = "Active queue",
+                                                subtitle = "Tap a card to select it, then open details when you are ready."
+                                            )
+                                        }
+                                        if (visibleOrders.isEmpty()) {
+                                            item {
+                                                EmptyQueueCard(
+                                                    title = if (state.orders.isEmpty()) "No orders yet" else "No orders match your current view",
+                                                    body = if (state.orders.isEmpty()) {
+                                                        "Create the first order from this screen or pull down to refresh when the backend receives new work."
+                                                    } else {
+                                                        "Try clearing the current filter, editing the search text, or changing the search query to inspect a different slice of the queue."
+                                                    },
+                                                    eyebrow = if (state.orders.isEmpty()) "EMPTY QUEUE" else "FILTERED VIEW",
+                                                    accent = if (state.orders.isEmpty()) Blue300 else Amber300
+                                                )
+                                            }
+                                        } else {
+                                            items(visibleOrders) { item ->
+                                                OrderCard(
+                                                    order = item,
+                                                    isSelected = state.selectedOrderId == item.id,
+                                                    onSelectOrder = onSelectOrder
+                                                )
+                                            }
+                                        }
+                                        if (selectedOrderSummary != null) {
+                                            item {
+                                                SelectedOrderTray(
+                                                    order = selectedOrderSummary,
+                                                    onOpen = { screenModeName = MobileScreenMode.Detail.name }
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                        item {
-                            CreateOrderCard(
-                                title = title,
-                                description = description,
-                                isExpanded = isCreateExpanded,
-                                isSubmitting = state.isSubmitting,
-                                isLoading = state.isLoading || state.isRefreshing,
-                                isEnabled = state.canCreateOrders,
-                                helperText = if (state.isOperator) {
-                                    "Operator mode can still capture new work into the shared queue."
-                                } else {
-                                    "Customer mode submits directly into the same shared queue."
-                                },
-                                onTitleChange = { title = it },
-                                onDescriptionChange = { description = it },
-                                onCreate = {
-                                    onCreateOrder(title.trim(), description.trim())
-                                    title = ""
-                                    description = ""
-                                    isCreateExpanded = false
-                                },
-                                onRefresh = onRefresh,
-                                onToggleExpanded = { isCreateExpanded = !isCreateExpanded }
-                            )
+                        if (screenMode == MobileScreenMode.Queue) {
+                            item {
+                                CreateOrderCard(
+                                    title = title,
+                                    description = description,
+                                    isExpanded = false,
+                                    isSubmitting = state.isSubmitting,
+                                    isLoading = state.isLoading || state.isRefreshing,
+                                    isEnabled = state.canCreateOrders,
+                                    helperText = if (state.isOperator) {
+                                        "Operator mode can still capture new work into the shared queue."
+                                    } else {
+                                        "Customer mode submits directly into the same shared queue."
+                                    },
+                                    onTitleChange = { title = it },
+                                    onDescriptionChange = { description = it },
+                                    onCreate = {},
+                                    onRefresh = onRefresh,
+                                    onToggleExpanded = { screenModeName = MobileScreenMode.Create.name }
+                                )
+                            }
                         }
                         item { ApiCard(state.apiBaseUrl) }
                     }
@@ -1562,6 +1608,47 @@ internal fun EmptyQueueCard(title: String, body: String, eyebrow: String, accent
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SelectedOrderTray(order: MobileOrderSummary, onOpen: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Navy900.copy(alpha = 0.94f)),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, Blue300.copy(alpha = 0.32f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    "${order.code} selected",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Open details, history, and comments",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Slate300,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Button(
+                onClick = onOpen,
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Navy700, contentColor = Slate100)
+            ) {
+                Text("Open")
             }
         }
     }
