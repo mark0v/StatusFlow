@@ -131,7 +131,7 @@ class MobileHomeScreenTest {
         }
 
         composeRule.onNodeWithTag(MobileUiTags.DETAIL_SCREEN).assertIsDisplayed()
-        composeRule.onNodeWithText("Approved").performClick()
+        composeRule.onNodeWithText("Move to Approved").performClick()
 
         assertEquals("approved", transitionedStatus)
     }

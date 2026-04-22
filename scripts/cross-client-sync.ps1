@@ -488,8 +488,8 @@ function Ensure-MobileSignedIn {
     do {
         $xml = Get-UiXml
         $loginStillVisible = Get-UiNodeByText -Xml $xml -Text "Sign in to the live queue"
-        $signedInMarker = Get-UiNodeByText -Xml $xml -Text "Signed in"
-        $queueSnapshotMarker = Get-UiNodeByText -Xml $xml -Text "Queue snapshot"
+        $signedInMarker = Get-UiNodeByText -Xml $xml -Text "StatusFlow"
+        $queueSnapshotMarker = Get-UiNodeByText -Xml $xml -Text "Active queue"
 
         if (-not $loginStillVisible -and ($signedInMarker -or $queueSnapshotMarker)) {
             return
@@ -532,12 +532,13 @@ function Reset-MobileQueueScreen {
     }
     Start-MobileApp
     Ensure-MobileSignedIn
-    # Wait longer for the queue to fully reload
-    Wait-ForUiText -Text "Queue snapshot" -TimeoutSec 45 | Out-Null
+    # The redesigned app can restore either queue or selected-order mode. The
+    # header is the stable post-session marker for both states.
+    Wait-ForUiText -Text "StatusFlow" -TimeoutSec 45 | Out-Null
 }
 
 function Focus-MobileSelectedOrderDetail {
-    Wait-ForUiText -Text "Selected for detail view" -TimeoutSec 20 | Out-Null
+    Wait-ForUiText -Text "Selected" -TimeoutSec 20 | Out-Null
     Tap-SelectedOrderCard
     Wait-ForUiText -Text "Selected order" -AllowScroll -TimeoutSec 20 | Out-Null
 }
@@ -572,7 +573,7 @@ function Wait-ForMobileOrderCardSelection {
     do {
         $xml = Get-UiXml
         $node = Get-OrderCardNodeByMarker -Xml $xml -Marker $Marker
-        if ($node -and $node.ParentNode -and ([string]$node.ParentNode.OuterXml) -like "*Selected for detail view*") {
+        if ($node -and $node.ParentNode -and ([string]$node.ParentNode.OuterXml) -like "*Selected*") {
             return @{ Xml = $xml; Node = $node }
         }
 
@@ -607,12 +608,12 @@ function Create-MobileOrder {
     )
 
     Scroll-ToQueueTop
-    Tap-UiText -Text "New order" -TimeoutSec 10
+    Tap-UiText -Text "Create" -TimeoutSec 10
     Tap-UiText -Text "Order title" -TimeoutSec 10
     Type-UiText -Text $Title
-    Tap-UiText -Text "Operator brief" -TimeoutSec 10
+    Tap-UiText -Text "Description" -TimeoutSec 10
     Type-UiText -Text $Description
-    Tap-UiText -Text "Create" -TimeoutSec 10
+    Tap-UiText -Text "Create order" -TimeoutSec 10
     Wait-ForUiText -Text $Title -Contains -AllowScroll -TimeoutSec 30 | Out-Null
     Focus-MobileSelectedOrderDetail
 }
@@ -629,6 +630,7 @@ function Add-MobileComment {
     param([Parameter(Mandatory = $true)][string]$CommentBody)
 
     Wait-ForUiText -Text "Selected order" -AllowScroll -TimeoutSec 20 | Out-Null
+    Tap-UiText -Text "Add note" -TimeoutSec 10
     Tap-UiText -Text "Add operator note" -TimeoutSec 10
     Type-UiText -Text $CommentBody
     Tap-UiText -Text "Post comment" -TimeoutSec 10
@@ -777,6 +779,9 @@ Reset-MobileQueueScreen
 # Use the debug/test hook to open the web-created order by ID - much more reliable than UI taps
 Open-MobileOrderByDebugIntent -OrderId $webCreatedOrder.id
 Wait-ForUiText -Text "Comments" -AllowScroll -TimeoutSec 30 | Out-Null
+Enable-AdbEnvironment
+Invoke-NativeCommand -FilePath $adbPath -ArgumentList @("shell", "input", "tap", "870", "1640") -FailureMessage "Comments tab tap failed." | Out-Null
+Start-Sleep -Seconds 1
 Wait-ForUiText -Text $mobileStatusLabel -AllowScroll -TimeoutSec 20 | Out-Null
 Wait-ForUiText -Text $webCommentBody -Contains -AllowScroll -TimeoutSec 60 | Out-Null
 Get-UiXml | Out-Null
