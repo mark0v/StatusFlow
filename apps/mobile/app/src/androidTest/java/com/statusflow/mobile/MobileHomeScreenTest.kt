@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -18,6 +19,8 @@ import com.statusflow.mobile.data.MobileOrderComment
 import com.statusflow.mobile.data.MobileOrderDetail
 import com.statusflow.mobile.data.MobileOrderHistoryEvent
 import com.statusflow.mobile.data.MobileOrderSummary
+import com.statusflow.mobile.data.MobileSessionSummary
+import com.statusflow.mobile.data.MobileUserSummary
 import com.statusflow.mobile.ui.theme.Amber300
 import com.statusflow.mobile.ui.theme.StatusFlowTheme
 import org.junit.Assert.assertEquals
@@ -32,27 +35,39 @@ class MobileHomeScreenTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun queueHeaderAndOverviewRenderAsExpected() {
+    fun queueControlsRenderCurrentFilterModel() {
+        var selectedStatus: String? = null
+        var createTapped = false
+
         composeRule.setContent {
             StatusFlowTheme {
                 Column {
-                    ScreenTitle()
-                    QueueOverviewCard(
+                    StatusCounterCarousel(
                         totalOrders = 10,
-                        visibleOrders = 3,
-                        selectedOrderCode = "SF-1001",
-                        activeFilterLabel = "In Review"
+                        statusCounts = mapOf("new" to 2, "in_review" to 3),
+                        selectedStatus = selectedStatus,
+                        onSelectStatus = { selectedStatus = it }
+                    )
+                    QueueToolbar(
+                        searchQuery = "",
+                        onSearchQueryChange = {},
+                        onCreate = { createTapped = true }
                     )
                 }
             }
         }
 
-        composeRule.onNodeWithTag(MobileUiTags.SCREEN_TITLE).assertIsDisplayed()
-        composeRule.onNodeWithTag(MobileUiTags.QUEUE_OVERVIEW).assertIsDisplayed()
+        composeRule.onNodeWithText("Total").assertIsDisplayed()
+        composeRule.onNodeWithTag(MobileUiTags.statusChip("new")).performClick()
+        composeRule.onNodeWithTag(MobileUiTags.SEARCH_INPUT).assertIsDisplayed()
+        composeRule.onNodeWithText("Create").performClick()
+
+        assertEquals("new", selectedStatus)
+        assertEquals(true, createTapped)
     }
 
     @Test
-    fun createComposerSubmitsTrimmedOrderData() {
+    fun createScreenSubmitsTrimmedOrderData() {
         var submittedTitle = ""
         var submittedDescription = ""
 
@@ -60,22 +75,19 @@ class MobileHomeScreenTest {
             StatusFlowTheme {
                 var title by remember { mutableStateOf("") }
                 var description by remember { mutableStateOf("") }
-                CreateOrderCard(
+                CreateOrderScreen(
                     title = title,
                     description = description,
-                    isExpanded = true,
+                    customerName = "Alex Morgan",
                     isSubmitting = false,
-                    isLoading = false,
                     isEnabled = true,
-                    helperText = "Customer mode submits directly into the same shared queue.",
                     onTitleChange = { title = it },
                     onDescriptionChange = { description = it },
                     onCreate = {
                         submittedTitle = title.trim()
                         submittedDescription = description.trim()
                     },
-                    onRefresh = {},
-                    onToggleExpanded = {}
+                    onCancel = {}
                 )
             }
         }
@@ -108,7 +120,7 @@ class MobileHomeScreenTest {
     }
 
     @Test
-    fun detailScreenTriggersStatusTransition() {
+    fun detailScreenStatusMenuUsesStatusLabels() {
         var transitionedStatus = ""
 
         composeRule.setContent {
@@ -130,9 +142,66 @@ class MobileHomeScreenTest {
         }
 
         composeRule.onNodeWithTag(MobileUiTags.DETAIL_SCREEN).assertIsDisplayed()
-        composeRule.onNodeWithText("Move to Approved").performClick()
+        composeRule.onNodeWithText("Change status").performClick()
+        composeRule.onNodeWithText("Approved").performClick()
 
         assertEquals("approved", transitionedStatus)
+    }
+
+    @Test
+    fun detailScreenCommentsTabSubmitsOperatorNote() {
+        var submittedComment = ""
+
+        composeRule.setContent {
+            StatusFlowTheme {
+                var commentBody by remember { mutableStateOf("") }
+                DetailScreenCard(
+                    detail = sampleDetail(),
+                    allowedTransitions = listOf("approved"),
+                    isSubmitting = false,
+                    actionMessage = null,
+                    selectedTab = MobileDetailTab.Comments,
+                    commentBody = commentBody,
+                    onCommentBodyChange = { commentBody = it },
+                    onSelectTab = {},
+                    onTransitionOrder = {},
+                    onAddComment = { submittedComment = commentBody.trim() },
+                    isOperator = true
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(MobileUiTags.COMMENT_INPUT).performTextInput("  Follow up tomorrow.  ")
+        composeRule.onNodeWithTag(MobileUiTags.COMMENT_SUBMIT).performClick()
+
+        assertEquals("Follow up tomorrow.", submittedComment)
+    }
+
+    @Test
+    fun mobileHomeClearsCommentComposerAfterSubmit() {
+        var submittedComment = ""
+
+        composeRule.setContent {
+            StatusFlowTheme {
+                MobileHomeScreen(
+                    state = sampleHomeState(),
+                    onSignIn = { _, _ -> },
+                    onSignOut = {},
+                    onRefresh = {},
+                    onCreateOrder = { _, _ -> },
+                    onSelectOrder = {},
+                    onTransitionOrder = {},
+                    onAddComment = { submittedComment = it }
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Comments 1").performClick()
+        composeRule.onNodeWithTag(MobileUiTags.COMMENT_INPUT).performTextInput("  Cleared after submit.  ")
+        composeRule.onNodeWithTag(MobileUiTags.COMMENT_SUBMIT).performClick()
+
+        assertEquals("Cleared after submit.", submittedComment)
+        composeRule.onNodeWithTag(MobileUiTags.COMMENT_SUBMIT).assertIsNotEnabled()
     }
 
     @Test
@@ -142,7 +211,7 @@ class MobileHomeScreenTest {
                 Column {
                     EmptyQueueCard(
                         title = "No orders match your current view",
-                        body = "Try clearing the current filter, editing the search text, or changing the sort to inspect a different slice of the queue.",
+                        body = "Try clearing the current filter, editing the search text, or changing the search query to inspect a different slice of the queue.",
                         eyebrow = "FILTERED VIEW",
                         accent = Amber300
                     )
@@ -181,6 +250,30 @@ class MobileHomeScreenTest {
         composeRule.onNodeWithText("Sign in to the live queue").assertIsDisplayed()
         composeRule.onNodeWithText("operator@example.com / operator123").assertIsDisplayed()
         composeRule.onNodeWithText("customer@example.com / customer123").assertIsDisplayed()
+    }
+
+    private fun sampleHomeState(): MobileHomeUiState {
+        return MobileHomeUiState(
+            isLoading = false,
+            session = MobileSessionSummary(
+                accessToken = "token",
+                email = "operator@example.com",
+                name = "Riley Chen",
+                role = "operator"
+            ),
+            orders = listOf(sampleSummary()),
+            users = listOf(
+                MobileUserSummary(
+                    id = "customer-1",
+                    email = "customer@example.com",
+                    name = "Alex Morgan",
+                    role = "customer"
+                )
+            ),
+            selectedOrderId = "order-1",
+            selectedOrderDetail = sampleDetail(),
+            allowedTransitions = mapOf("in_review" to listOf("approved", "rejected"))
+        )
     }
 
     private fun sampleSummary(): MobileOrderSummary {
